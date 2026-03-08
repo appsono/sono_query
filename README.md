@@ -8,7 +8,7 @@ Audio file discovery and metadata reading for [Sono](https://github.com/appsono/
 ```yml
   sono_query:
     git:
-      url: https://github.com/appsono/sono_query/.git
+      url: https://github.com/appsono/sono_query.git
       ref: <current_tag>
 ```
 
