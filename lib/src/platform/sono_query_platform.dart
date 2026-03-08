@@ -1,4 +1,5 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:sono_query/src/platform/sono_query_method_channel.dart';
 
 abstract class SonoQueryPlatform extends PlatformInterface {
   SonoQueryPlatform() : super(token: _token);
@@ -8,9 +9,7 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   static SonoQueryPlatform? _instance;
 
   static SonoQueryPlatform get instance {
-    if (_instance == null) {
-      throw UnimplementedError('SonoQueryPlatform has not been set');
-    }
+    _instance ??= SonoQueryMethodChannel();
     return _instance!;
   }
 
