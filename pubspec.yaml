@@ -28,6 +28,6 @@ flutter:
       ios:
         pluginClass: SonoQueryPlugin
       linux:
-        pluginClass: SonoQueryLinux
+        pluginClass: SonoQueryDesktop
       windows:
-        pluginClass: SonoQueryWindows
+        pluginClass: SonoQueryDesktop
