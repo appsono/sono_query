@@ -1,0 +1,32 @@
+name: sono_query
+description: "Audio file discovery and metadata reading for Sono."
+version: 0.1.0
+homepage: https://github.com/appsono/sono_query
+
+enviroment:
+  sdk: ^3.11.1
+  flutter: ">=3.29.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  audio_metadata_reader: ^1.4.2
+  plugin_platform_interface: ^2.1.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: wtf.sono.query
+        pluginClass: SonoQueryPlugin
+      ios:
+        pluginClass: SonoQueryPlugin
+      linux:
+        pluginClass: SonoQueryLinux
+      windows:
+        pluginClass: SonoQueryWindows
