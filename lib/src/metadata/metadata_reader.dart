@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:sono_query/src/models/song.dart';
+import 'package:sono_query/src/platform/sono_query_platform.dart';
 
 class MetadataReader {
   static Future<Song> read(String filePath) async {
@@ -46,9 +47,10 @@ class MetadataReader {
           bytes[1] == 0x49 &&
           bytes[2] == 0x46 &&
           bytes[3] == 0x46; // RIFF
-      if (!isJpeg && !isPng && !isWebp) return null;
+      if (isJpeg || isPng || isWebp) return bytes;
 
-      return Uint8List.fromList(metadata.pictures.first.bytes);
+      //fallback to MediaStore on Android
+      return await SonoQueryPlatform.instance.getCoverFromMediaStore(filePath);
     } catch (_) {
       return null;
     }

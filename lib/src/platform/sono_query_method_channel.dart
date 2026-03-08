@@ -9,4 +9,13 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
     final paths = await _channel.invokeListMethod<String>('getAudioFilePaths');
     return paths ?? [];
   }
+
+  @override
+  Future<Uint8List?> getCoverFromMediaStore(String filePath) async {
+    final bytes = await _channel.invokeMethod<Uint8List>(
+      'getCoverFromMediaStore',
+      filePath,
+    );
+    return bytes;
+  }
 }

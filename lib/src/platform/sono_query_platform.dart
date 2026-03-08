@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:sono_query/src/platform/sono_query_method_channel.dart';
 
@@ -16,6 +18,10 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   static set instance(SonoQueryPlatform instance) {
     PlatformInterface.verify(instance, _token);
     _instance = instance;
+  }
+
+  Future<Uint8List?> getCoverFromMediaStore(String filePath) {
+    throw UnimplementedError();
   }
 
   /// Returns a list of audio file paths on device
