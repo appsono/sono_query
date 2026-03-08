@@ -3,7 +3,7 @@ description: "Audio file discovery and metadata reading for Sono."
 version: 0.1.0
 homepage: https://github.com/appsono/sono_query
 
-enviroment:
+environment:
   sdk: ^3.11.1
   flutter: ">=3.29.0"
 
@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   audio_metadata_reader: ^1.4.2
   plugin_platform_interface: ^2.1.8
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
