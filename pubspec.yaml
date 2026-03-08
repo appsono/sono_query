@@ -23,7 +23,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: wtf.sono.query
+        package: wtf.sono.packages.query
         pluginClass: SonoQueryPlugin
       ios:
         pluginClass: SonoQueryPlugin
