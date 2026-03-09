@@ -10,10 +10,13 @@ class Song {
   final String? genre;
   final DateTime? releaseDate;
 
+  final String? album;
+
   const Song({
     required this.path,
     required this.title,
     this.artist,
+    this.album,
     this.duration,
     this.cover,
     this.genre,
@@ -27,7 +30,7 @@ class Song {
   }
 
   @override
-  String toString() => 'Song(title: $title, artist: $artist, path: $path)';
+  String toString() => 'Song(title: $title, artist: $artist, album: $album, path: $path)';
 
   @override
   bool operator ==(Object other) =>

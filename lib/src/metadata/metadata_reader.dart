@@ -14,6 +14,7 @@ class MetadataReader {
         path: filePath,
         title: metadata.title ?? Song.fromPath(filePath).title,
         artist: metadata.artist,
+        album: metadata.artist,
         duration: metadata.duration,
         cover: null,
         genre: metadata.genres.isNotEmpty ? metadata.genres.first : null,
