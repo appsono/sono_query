@@ -7,6 +7,7 @@ import 'package:sono_query/src/platform/sono_query_platform.dart';
 
 export 'package:sono_query/src/models/song.dart';
 export 'package:sono_query/src/metadata/metadata_reader.dart';
+export 'package:sono_query/src/platform/sono_query_desktop.dart';
 
 class SonoQuery {
   /// Returns all songs found on device with metadata
