@@ -11,11 +11,23 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
   }
 
   @override
+  Future<List<Map<String, dynamic>>?> getSongsWithMetadata() async {
+    final result = await _channel.invokeListMethod<Map>('getSongsWithMetadata');
+    return result?.map((m) => Map<String, dynamic>.from(m)).toList();
+  }
+
+  @override
   Future<Uint8List?> getCoverFromMediaStore(String filePath) async {
     final bytes = await _channel.invokeMethod<Uint8List>(
       'getCoverFromMediaStore',
       filePath,
     );
     return bytes;
+  }
+
+  @override
+  Future<Map<String, String>?> getGenres() async {
+    final result = await _channel.invokeMapMethod<String, String>('getGenres');
+    return result;
   }
 }

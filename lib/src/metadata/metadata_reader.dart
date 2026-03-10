@@ -5,7 +5,7 @@ import 'package:sono_query/src/models/song.dart';
 import 'package:sono_query/src/platform/sono_query_platform.dart';
 
 class MetadataReader {
-  static Future<Song> read(String filePath) async {
+  static Song readSync(String filePath) {
     try {
       final file = File(filePath);
       final metadata = readMetadata(file, getImage: false);
@@ -25,8 +25,24 @@ class MetadataReader {
             : null,
       );
     } catch (e) {
-      print('metadata read failed for $filePath: $e');
       return Song.fromPath(filePath);
+    }
+  }
+
+  /// Async one (for backwards compatibility aka dont use!)
+  static Future<Song> read(String filePath) async {
+    return readSync(filePath);
+  }
+
+  /// Reads only the genre tag from a file
+  /// Used on desktop/iOS genre backfill
+  static String? readGenreSync(String filePath) {
+    try {
+      final file = File(filePath);
+      final metadata = readMetadata(file, getImage: false);
+      return metadata.genres.isNotEmpty ? metadata.genres.first : null;
+    } catch (_) {
+      return null;
     }
   }
 

@@ -1,6 +1,7 @@
 package wtf.sono.packages.query
 
 import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -22,7 +23,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "getAudioFilePaths" -> result.success(getAudioFilePaths())
+            "getSongsWithMetadata" -> result.success(getSongsWithMetadata())
             "getCoverFromMediaStore" -> {
                 val filePath = call.arguments as String
                 result.success(getCoverFromMediaStore(filePath))
@@ -31,24 +32,93 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    private fun getAudioFilePaths():  List<String> {
-        val paths = mutableListOf<String>()
-        val projection = arrayOf(MediaStore.Audio.Media.DATA)
+    /// Returns all metadata from MediaStore in one query
+    /// On API 30+: genre is included directly (AudioColumns.GENRE)
+    /// On API < 30: genre is resolved from Genres join tables
+    private fun getSongsWithMetadata(): List<Map<String, Any?>> {
+        val songs = mutableListOf<Map<String, Any?>>()
+        val hasGenreColumn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+        val genreLookup = mutableMapOf<String, String>()
+        if (!hasGenreColumn) {
+            context.contentResolver.query(
+                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME),
+                null, null, null
+            )?.use { genreCursor ->
+                val idIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                val nameIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+
+                while (genreCursor.moveToNext()) {
+                    val genreName = genreCursor.getString(nameIdx) ?: continue
+                    val memberUri = MediaStore.Audio.Genres.Members.getContentUri(
+                        "external", genreCursor.getLong(idIdx)
+                    )
+
+                    context.contentResolver.query(
+                        memberUri,
+                        arrayOf(MediaStore.Audio.Media.DATA),
+                        null, null, null
+                    )?.use { memberCursor ->
+                        val dataIdx = memberCursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                        while (memberCursor.moveToNext()) {
+                            memberCursor.getString(dataIdx)?.let { genreLookup[it] = genreName }
+                        }
+                    }
+                }
+            }
+        }
+
+        val baseProjection = arrayOf(
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.YEAR,
+        )
+
+        val projection = if (hasGenreColumn) {
+            baseProjection + MediaStore.Audio.Media.GENRE
+        } else {
+            baseProjection
+        }
 
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
-            null,
+            //skip short audio clips (ringtones, notifications, etc)
+            "${MediaStore.Audio.Media.DURATION} > 0",
             null,
             null
-        )?.use  { cursor ->
-            val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        )?.use {cursor ->
+            val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+            val titleIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val artistIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val albumIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val durationIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val yearIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+            val genreIdx = if (hasGenreColumn) cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE) else -1
+
             while (cursor.moveToNext()) {
-                paths.add(cursor.getString(dataIndex))
+                val path = cursor.getString(dataIdx)
+                val artist = cursor.getString(artistIdx)
+                val album = cursor.getString(albumIdx)
+
+                songs.add(mapOf(
+                    "path" to path,
+                    "title" to cursor.getString(titleIdx),
+                    //MediaStore return <unknown> for missing artist/album
+                    "artist" to if (artist == "<unknown>") null else artist,
+                    "album" to if (album == "<unknown>") null else album,
+                    "duration" to cursor.getLong(durationIdx), //ms
+                    "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
+                    "genre" to if (genreIdx >= 0) cursor.getString(genreIdx) else genreLookup[path],
+                ))
             }
         }
 
-        return paths
+        return songs
     }
 
     private fun getCoverFromMediaStore(filePath: String): ByteArray? {

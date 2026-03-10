@@ -26,4 +26,12 @@ abstract class SonoQueryPlatform extends PlatformInterface {
 
   /// Returns a list of audio file paths on device
   Future<List<String>> getAudioFilePaths();
+
+  /// Returns song with metadata from MediaStore
+  /// Return null if not supported == dart-based reading
+  Future<List<Map<String, dynamic>>?> getSongsWithMetadata() async => null;
+
+  /// Returns map of file path => genre from MediaStore
+  /// Returns null if not supported
+  Future<Map<String, String>?> getGenres() async => null;
 }
