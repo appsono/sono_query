@@ -54,7 +54,7 @@ class SonoQuery {
   }
 
   /// Returns map of file path > genre name
-  /// 
+  ///
   /// On Android: genre is already included in getSong() for all API levels
   /// This method is mainly useful for desktop/iOS where it reads genre tags
   /// from files
