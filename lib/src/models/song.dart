@@ -31,7 +31,8 @@ class Song {
 
   @override
   String toString() =>
-      'Song(title: $title, artist: $artist, album: $album, path: $path)';
+      'Song(title: $title, artist: $artist, album: $album '
+      'duration: $duration, genre, $genre, path: $path';
 
   @override
   bool operator ==(Object other) =>
