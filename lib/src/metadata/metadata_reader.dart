@@ -50,21 +50,22 @@ class MetadataReader {
     try {
       final file = File(filePath);
       final metadata = readMetadata(file, getImage: true);
-      if (metadata.pictures.isEmpty) return null;
 
-      final bytes = Uint8List.fromList(metadata.pictures.first.bytes);
-      if (bytes.length < 4) return null;
-
-      //check for JPEG or PNG magic bytes
-      final isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8;
-      final isPng = bytes[0] == 0x89 && bytes[1] == 0x50;
-      final isWebp =
-          bytes.length > 11 &&
-          bytes[0] == 0x52 &&
-          bytes[1] == 0x49 &&
-          bytes[2] == 0x46 &&
-          bytes[3] == 0x46; // RIFF
-      if (isJpeg || isPng || isWebp) return bytes;
+      if (metadata.pictures.isNotEmpty) {
+        final bytes = Uint8List.fromList(metadata.pictures.first.bytes);
+        if (bytes.length >= 4) {
+          //check for JPEG or PNG magic bytes
+          final isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8;
+          final isPng = bytes[0] == 0x89 && bytes[1] == 0x50;
+          final isWebp =
+              bytes.length > 11 &&
+              bytes[0] == 0x52 &&
+              bytes[1] == 0x49 &&
+              bytes[2] == 0x46 &&
+              bytes[3] == 0x46; // RIFF
+          if (isJpeg || isPng || isWebp) return bytes;
+        }
+      }
 
       //fallback to MediaStore on Android
       return await SonoQueryPlatform.instance.getCoverFromMediaStore(filePath);
