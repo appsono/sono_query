@@ -103,7 +103,8 @@ class SonoQuery {
     return Song(
       path: path,
       title: (map['title'] as String?) ?? Song.fromPath(path).title,
-      album: map['artist'] as String?,
+      artist: map['artist'] as String?,
+      album: map['album'] as String?,
       duration: durationMs != null && durationMs > 0
           ? Duration(milliseconds: durationMs)
           : null,
