@@ -13,12 +13,11 @@ dependencies:
   audio_metadata_reader: ^1.4.2
   plugin_platform_interface: ^2.1.8
   path: ^1.9.1
-  image: ^4.8.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  lints: ^6.1.0
 
 flutter:
   plugin:
