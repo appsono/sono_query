@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for version change
+        id: version
+        run: |
+          CURRENT=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          git show HEAD~1:pubspec.yaml > /tmp/old_pubspec.yaml 2>/dev/null || true
+          OLD=$(grep '^version:' /tmp/old_pubspec.yaml 2>/dev/null | awk '{print $2}')
+
+          echo "old=$OLD"
+          echo "current=$CURRENT"
+
+          if [ "$CURRENT" != "$OLD" ] && [ -n "$CURRENT" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git tag "$TAG"
+          git push origin "$TAG"
