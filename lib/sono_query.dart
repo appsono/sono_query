@@ -86,23 +86,12 @@ class SonoQuery {
     }
   }
 
+  /// Read cover art for single file
+  ///
+  /// Tries embedded metadata first, validates magic bytes,
+  /// then falls back to MediaStore on Android
   static Future<Uint8List?> getCover(String filePath) async {
     return MetadataReader.readCover(filePath);
-  }
-
-  /// Returns map of file path > genre name
-  ///
-  /// On Android: genre is already included in getSong() for all API levels
-  /// This method is mainly useful for desktop/iOS where it reads genre tags
-  /// from files
-  static Future<Map<String, String>> getGenres() async {
-    //MediaStore genre tables
-    final platformGenres = await SonoQueryPlatform.instance.getGenres();
-    if (platformGenres != null) return platformGenres;
-
-    //fallback: read genre from file metadata
-    final paths = await SonoQueryPlatform.instance.getAudioFilePaths();
-    return Isolate.run(() => _readAllGenres(paths));
   }
 
   /// Convert platform metadata map to Song
@@ -134,17 +123,6 @@ class SonoQuery {
         return _ScanResult(path: p, error: e);
       }
     }).toList();
-  }
-
-  /// Reads only genre tags from files
-  /// again in a background isolate
-  static Map<String, String> _readAllGenres(List<String> paths) {
-    final genres = <String, String>{};
-    for (final path in paths) {
-      final genre = MetadataReader.readGenreSync(path);
-      if (genre != null) genres[path] = genre;
-    }
-    return genres;
   }
 }
 
