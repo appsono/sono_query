@@ -4,12 +4,14 @@ import 'audio_extensions.dart';
 
 Future<List<String>> scanDirectory(String path) async {
   final dir = Directory(path);
-  if (!dir.existsSync()) return [];
+  if (!await dir.exists()) return [];
 
-  return dir
-      .listSync(recursive: true)
-      .whereType<File>()
-      .where((f) => audioExtensions.contains(p.extension(f.path).toLowerCase()))
-      .map((f) => f.path)
-      .toList();
+  final paths = <String>[];
+  await for (final entity in dir.list(recursive: true)) {
+    if (entity is File &&
+        audioExtensions.contains(p.extension(entity.path.toLowerCase()))) {
+      paths.add(entity.path);
+    }
+  }
+  return paths;
 }
