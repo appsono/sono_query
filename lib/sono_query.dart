@@ -17,7 +17,7 @@ class SonoQuery {
   /// Default batch size for streaming metadata reads
   static const _defaultBatchSize = 50;
 
-  /// Returns all songs foud on device with metadata
+  /// Returns all songs found on device with metadata
   ///
   /// On Android: metadata comes from MediaStore in one query
   /// On desktop/iOS: files are discovered, then read in background
