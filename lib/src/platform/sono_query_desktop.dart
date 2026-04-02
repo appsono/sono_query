@@ -9,11 +9,20 @@ class SonoQueryDesktop extends SonoQueryPlatform {
   }
 
   @override
-  Future<List<String>> getAudioFilePaths() async {
+  Future<List<String>> getAudioFilePaths({
+    List<String> additionalPaths = const [],
+    List<String> excludedPaths = const [],
+    void Function(String path)? onDiscover,
+  }) async {
     final home = Platform.isLinux
         ? Platform.environment['HOME']
         : Platform.environment['USERPROFILE'];
     if (home == null) return [];
-    return scanDirectory(p.join(home, 'Music'));
+    final roots = [p.join(home, 'Music'), ...additionalPaths];
+    return scanDirectories(
+      roots,
+      excludedPaths: excludedPaths,
+      onDiscover: onDiscover,
+    );
   }
 }
