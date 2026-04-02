@@ -5,7 +5,7 @@ class Song {
   final String path;
   final String title;
 
-  /// RAw artist tag as stored in metadata (may contain delimiters)
+  /// Raw artist tag as stored in metadata (may contain delimiters)
   final String? artist;
 
   /// Individual artist names parsed from [artist]

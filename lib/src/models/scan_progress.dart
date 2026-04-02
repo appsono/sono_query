@@ -1,4 +1,4 @@
-/// Snapshor of scan progres, emitted via [ScanProgressCallback]
+/// Snapshot of scan progress, emitted via [ScanProgressCallback]
 class ScanProgress {
   /// Total number of files discovered (known so far)
   /// Android: Full MediaStore count
@@ -35,12 +35,12 @@ enum ScanPhase {
   /// Discovering files
   discovering,
 
-  /// Reading metadata from discovering files
+  /// Reading metadata from discovered files
   reading,
 
   /// Scan completed
   done,
 }
 
-/// Callback that receivers [ScanProgress] snapshots during scanning
+/// Callback that receives [ScanProgress] snapshots during scanning
 typedef ScanProgressCallback = void Function(ScanProgress progress);

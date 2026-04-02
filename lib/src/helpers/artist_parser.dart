@@ -33,7 +33,7 @@ class ArtistParser {
         );
         if (idx == -1) break;
 
-        //dont match if preceded by an escape backlash
+        //dont match if preceded by an escape backslash
         if (idx > 0 && working[idx - 1] == r'\') {
           searchForm = idx + excluded.length;
           continue;

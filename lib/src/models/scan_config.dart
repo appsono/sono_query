@@ -1,12 +1,12 @@
 /// Conf for song scanning and artist parsing
 ///
 /// Sorry for the long explanatory comments, but
-/// since this is a public repo that will may be given away to others to work on
-/// those are neccesary to ensure everyone understands everything directly.
+/// since this is a public repo that may be given away to others to work on
+/// those are necessary to ensure everyone understands everything directly.
 class ScanConfig {
   /// Directories to exclude from scanning
-  /// Songs whose path starts with any of these preifxes are skipped
-  /// Android: MediaSTore filtering
+  /// Songs whose path starts with any of these prefixes are skipped
+  /// Android: MediaStore filtering
   /// Desktop: directory walk
   final List<String> excludedPaths;
 
@@ -30,7 +30,7 @@ class ScanConfig {
     this.artistParser,
   });
 
-  /// Defalt config: no filtering, no artist parsing
+  /// Default config: no filtering, no artist parsing
   static const none = ScanConfig();
 }
 
@@ -41,7 +41,7 @@ class ArtistParserConfig {
   /// Order matters: longer/more specific delimiters should come first
   /// so that e.g. ' / ' is matched before '/'
   ///
-  /// Defaults covber the most common
+  /// Defaults cover the most common
   final List<String> delimiters;
 
   /// Artist names that must never be split

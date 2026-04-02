@@ -12,8 +12,8 @@ export 'package:sono_query/src/models/song.dart';
 export 'package:sono_query/src/metadata/metadata_reader.dart';
 export 'package:sono_query/src/platform/sono_query_desktop.dart';
 
-/// Callback for files that failed metadta reading
-/// Receives file path and the error that occured
+/// Callback for files that failed metadata reading
+/// Receives file path and the error that occurred
 typedef ScanErrorCallback = void Function(String path, Object error);
 
 class SonoQuery {
@@ -133,7 +133,7 @@ class SonoQuery {
   ///
   /// [config] controls filtering and artist parsing
   /// [onProgress] is called periodically with scan progress
-  /// [OnError] is called for each file that fails metadata reading
+  /// [onError] is called for each file that fails metadata reading
   static Stream<Song> getSongsStream({
     int batchSize = _defaultBatchSize,
     ScanConfig config = ScanConfig.none,
@@ -259,7 +259,7 @@ class SonoQuery {
     );
   }
 
-  /// Reads metadata for all paths, returniong results with error info
+  /// Reads metadata for all paths, returning results with error info
   /// Runs synchronously inside background isolate
   static List<_ScanResult> _readAllMetadata(List<String> paths) {
     return paths.map((p) {
