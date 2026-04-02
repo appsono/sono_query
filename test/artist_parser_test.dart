@@ -80,8 +80,10 @@ void main() {
       });
 
       test('escaped slash in multi-artist', () {
-        final result =
-            ArtistParser.parse(r'AC\/DC / Guns N Roses', defaultConfig);
+        final result = ArtistParser.parse(
+          r'AC\/DC / Guns N Roses',
+          defaultConfig,
+        );
         expect(result, ['AC/DC', 'Guns N Roses']);
       });
     });
@@ -91,8 +93,10 @@ void main() {
         final config = ArtistParserConfig(
           excludedArtists: ['Tyler, The Creator'],
         );
-        final result =
-            ArtistParser.parse('Tyler, The Creator, Pharrell', config);
+        final result = ArtistParser.parse(
+          'Tyler, The Creator, Pharrell',
+          config,
+        );
         expect(result, ['Tyler, The Creator', 'Pharrell']);
       });
 
@@ -122,8 +126,10 @@ void main() {
         final config = ArtistParserConfig(
           excludedArtists: ['tyler, the creator'],
         );
-        final result =
-            ArtistParser.parse('Tyler, The Creator, Pharrell', config);
+        final result = ArtistParser.parse(
+          'Tyler, The Creator, Pharrell',
+          config,
+        );
         expect(result, ['Tyler, The Creator', 'Pharrell']);
       });
 
@@ -131,8 +137,10 @@ void main() {
         final config = ArtistParserConfig(
           excludedArtists: ['TYLER, THE CREATOR'],
         );
-        final result =
-            ArtistParser.parse('Tyler, The Creator, Pharrell', config);
+        final result = ArtistParser.parse(
+          'Tyler, The Creator, Pharrell',
+          config,
+        );
         //yhould keep original "Tyler, The Creator" casing
         expect(result, ['Tyler, The Creator', 'Pharrell']);
       });
@@ -187,10 +195,7 @@ void main() {
       });
 
       test('semicolon-separated from MusicBrainz', () {
-        final result = ArtistParser.parse(
-          'Aphex Twin; µ-Ziq',
-          defaultConfig,
-        );
+        final result = ArtistParser.parse('Aphex Twin; µ-Ziq', defaultConfig);
         expect(result, ['Aphex Twin', 'µ-Ziq']);
       });
     });

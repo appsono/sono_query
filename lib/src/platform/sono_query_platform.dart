@@ -25,7 +25,7 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   }
 
   /// Returns a list of audio file paths on device
-  /// 
+  ///
   /// [additionalPaths] > extra dirs to scan (desktop only)
   /// [onDiscover] > called once per found file => for progress reporting
   Future<List<String>> getAudioFilePaths({
@@ -36,7 +36,7 @@ abstract class SonoQueryPlatform extends PlatformInterface {
 
   /// Returns song with metadata from MediaStore
   /// Return null if not supported == dart-based reading
-  /// 
+  ///
   /// [minDuration] > skip songs shorter than this
   /// [excludedPaths] > skip songs whose path starts with any prefix
   Future<List<Map<String, dynamic>>?> getSongsWithMetadata({
