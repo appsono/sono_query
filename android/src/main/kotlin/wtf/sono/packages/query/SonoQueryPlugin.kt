@@ -23,7 +23,13 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "getSongsWithMetadata" -> result.success(getSongsWithMetadata())
+            "getSongsWithMetadata" -> {
+                val args = call.arguments as? Map<*, *>
+                val minDurationMs = (args?.get("minDurationMs") as? Number)?.toLong()
+                val excludedPaths = (args?.get("excludedPaths") as? List<*>)
+                    ?.filterIsInstance<String>() ?: emptyList()
+                result.success(getSongsWithMetadata(minDurationMs, excludedPaths))
+            }
             "getCoverFromMediaStore" -> {
                 val filePath = call.arguments as String
                 result.success(getCoverFromMediaStore(filePath))
@@ -35,7 +41,13 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     /// Returns all metadata from MediaStore in one query
     /// On API 30+: genre is included directly (AudioColumns.GENRE)
     /// On API < 30: genre is resolved from Genres join tables
-    private fun getSongsWithMetadata(): List<Map<String, Any?>> {
+    ///
+    /// [minDurationMs] > skip songs shorter than this, defaults to > 0
+    /// [excludedPaths] > skip songs whose path starts with any of these prefixes
+    private fun getSongsWithMetadata(
+        minDurationMs: Long?,
+        excludedPaths: List<String>
+    ): List<Map<String, Any?>> {
         val songs = mutableListOf<Map<String, Any?>>()
         val hasGenreColumn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
@@ -84,12 +96,22 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             baseProjection
         }
 
+        //build WHERE clause: min duration + path exclusions
+        val durationThreshold = minDurationMs ?: 0L
+        val selectionParts = mutableListOf("${MediaStore.Audio.Media.DURATION} > $durationThreshold")
+        val selectionArgs = mutableListOf<String>()
+
+        for (path in excludedPaths) {
+            selectionParts.add("${MediaStore.Audio.Media.DATA} NOT LIKE ?")
+            //append /% so /storage/emulated/0/Ringtones matches everything inside
+            selectionArgs.add("${path.trimEnd('/')}/%")
+        }
+
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
-            //skip short audio clips (ringtones, notifications, etc)
-            "${MediaStore.Audio.Media.DURATION} > 0",
-            null,
+            selectionParts.joinToString(" AND "),
+            selectionArgs.toTypedArray(),
             null
         )?.use {cursor ->
             val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
