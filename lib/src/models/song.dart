@@ -40,7 +40,7 @@ class Song {
   }
 
   /// Returns a copy with selected fields replaced
-  Song copyWith([
+  Song copyWith({
     String? path,
     String? title,
     String? artist,
@@ -50,7 +50,7 @@ class Song {
     Uint8List? cover,
     String? genre,
     DateTime? releaseDate,
-  ]) {
+  }) {
     return Song(
       path: path ?? this.path,
       title: title ?? this.title,
