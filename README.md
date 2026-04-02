@@ -25,6 +25,121 @@ await for (final song in SonoQuery.getSongsStream()) {
 }
 ```
 
+## Scan Configuration
+
+Pass a `ScanConfig` to control filtering and artist parsing:
+
+```dart
+final config = ScanConfig(
+  // Skip these directories entirely
+  excludedPaths: [
+    '/storage/emulated/0/Ringtones',
+    '/storage/emulated/0/Music/trashSongs',
+  ],
+
+  // Scan additional directories (desktop only, ~/Music is always included)
+  additionalPaths: [
+    '/home/user/Downloads/Music',
+  ];
+
+  // Skip songs shorter than 10 seconds
+  minDuration: const Duration(seconds: 10),
+
+  // Enable multi-artist parsing (see below)
+  artistParser: const ArtistParserConfig(),
+);
+```
+
+### Excluded Paths
+
+Songs whose file paths start with any excluded prefix are filtered out.
+On Android this is pushed into the MediaStore `WHERE` clause (`DATA NOT LIKE ?`).
+On desktop/iOS it's applied during the directory walk.
+
+### Additional Paths (desktop only)
+
+By default only `~/Music` (Linux) or `%USERPROFILE%\Music` (Windows) is scanned.
+Additional paths are scanned alongside it.
+
+### Minimum Duration
+
+Songs shorter than `minDuration` are skipped.
+On Android this is a MediaStore `WHERE` clause (`DURATION > ?`).
+On desktop/iOS it's applied after metadata reading.
+
+## Multi-Artist Parsing
+
+Songs downloaded with yt-dlp or other tools often store multiple artists in a single tag separated by `/`, `;`, `,`, etc. `ArtistParserConfig` splits these automatically.
+
+```dart
+final config = ScanConfig(
+  artistParser: ArtistParserConfig(
+    // These are the defaults; override to customize
+    delimiters: [' / ', '; ', ';', ' + ', ', ', '/'],
+
+    // Artist names that should never be split,
+    // even if they contain a delimiter
+    excludedArtists: ['Tyler, The Creator', 'mathis + the world'],
+  ),
+);
+
+final songs = await SonoQuery.getSongs(config: config);
+for (final song in songs) {
+  print(song.artist);   // raw tag: "Jay-Z / Kanye West"
+  print(song.artists);  // parsed: ["Jay-Z", "Kanye West"]
+}
+```
+
+### Escape Character
+
+Use backslash (`\`) before a character to prevent splitting:
+
+| Raw tag              | Parsed result              |
+| -------------------- | -------------------------- |
+| `Artist / Artist2`   | `["Artist1", "Artist2"]`   |
+| `A + B + C`          | `["A", "B", "C"]`          |
+| `AC\/DC`             | `["AC/DC"]`                |
+| `AC\/DC / Someone`   | `["AC/DC", "Someone"]`     |
+
+### Standalone Usage
+
+`ArtistParser` can also be used independently from scanning:
+
+```dart
+final artists = ArtistParser.parse(
+  'Tyler, The Creator, Someone',
+  ArtistParserConfig(excludedArtists: ['Tyler, The Creator']),
+)
+// -> ["Tyler, The Creator", "Someone"]
+```
+
+## Scan Progress
+
+Both `getSongs` and `getSongsStream` accept an `onProgress` callback for live progress reporting:
+
+```dart
+final songs = await SonoQuery.getSongs(
+  onProgress: (progress) {
+    print('${progress.phase.name}: '
+        '${progress.completed}/${progress.total} '
+        '(${(progress.progress * 100).toStringAsFixed(0)}%)');
+    if (progress.currentPath != null) {
+      print('  → ${progress.currentPath}');
+    }
+  },
+);
+```
+
+`ScanProgress` fields:
+ 
+| Field                   | Type                         | Description                        |
+|-------------------------|------------------------------|----------------------------------- |
+| `total`                 | `int`                        | Total files discovered             |
+| `completed`             | `int`                        | Files processed so far             |
+| `progress`              | `double`                     | 0.0 - 1.0 fraction                 |
+| `currentPath`           | `String?`                    | File currently being processed     |
+| `phase`                 | `ScanPhase`                  | `discovering` > `reading` > `done` |
+
 ## Error handling
 
 Both `getSongs` and `getSongsStream` accept an `onError` callback for files that fail metadata reading. Failed files are skipped, scanning continues:
@@ -79,6 +194,7 @@ Files must be added to these directories through the Files app or iTunes file sh
 ### Linux / Windows
 
 No special permissions needed. Scans `~/Music` (Linux) or `%USERPROFILE%\Music` (Windows).
+Add more directories via `ScanConfig.additionalPaths`.
 
 ## Supported Platforms
 
