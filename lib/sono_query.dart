@@ -1,6 +1,9 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:sono_query/src/helpers/artist_parser.dart';
+import 'package:sono_query/src/models/scan_config.dart';
+import 'package:sono_query/src/models/scan_progress.dart';
 import 'package:sono_query/src/models/song.dart';
 import 'package:sono_query/src/metadata/metadata_reader.dart';
 import 'package:sono_query/src/platform/sono_query_platform.dart';
@@ -19,30 +22,105 @@ class SonoQuery {
 
   /// Returns all songs found on device with metadata
   ///
-  /// On Android: metadata comes from MediaStore in one query
-  /// On desktop/iOS: files are discovered, then read in background
-  /// isolate (avoids blocking main thread)
+  ///
+  /// [config] controls filtering (excluded/additional paths, min duration)
+  /// and artist tag parsing
+  ///
+  /// [onProgress] is called periodically with a [ScanProgress] snapshot
   ///
   /// [onError] is called for each file that fails metadata reading
   /// File is skipped and scanning continues
-  static Future<List<Song>> getSongs({ScanErrorCallback? onError}) async {
-    final platformSongs = await SonoQueryPlatform.instance
-        .getSongsWithMetadata();
+  ///
+  /// On Android: metadata comes from MediaStore in one query
+  /// On desktop/iOS: files are discovered, then read in background
+  /// isolate (avoids blocking main thread)
+  static Future<List<Song>> getSongs({
+    ScanConfig config = ScanConfig.none,
+    ScanProgressCallback? onProgress,
+    ScanErrorCallback? onError,
+  }) async {
+    final platformSongs = await SonoQueryPlatform.instance.getSongsWithMetadata(
+      minDuration: config.minDuration,
+      excludedPaths: config.excludedPaths,
+    );
 
     if (platformSongs != null) {
-      return platformSongs.map(_songFromMap).toList();
+      onProgress?.call(
+        ScanProgress(
+          total: platformSongs.length,
+          completed: 0,
+          phase: ScanPhase.reading,
+        ),
+      );
+
+      final songs = <Song>[];
+      for (var i = 0; i < platformSongs.length; i++) {
+        songs.add(_songFromMap(platformSongs[i], config.artistParser));
+        if (onProgress != null &&
+            (i % 100 == 0 || i == platformSongs.length - 1)) {
+          onProgress(
+            ScanProgress(
+              total: platformSongs.length,
+              completed: i + 1,
+              phase: i == platformSongs.length - 1
+                  ? ScanPhase.done
+                  : ScanPhase.reading,
+            ),
+          );
+        }
+      }
+      return songs;
     }
 
-    //fallback: read metadata from files
-    final paths = await SonoQueryPlatform.instance.getAudioFilePaths();
+    //fallback: discover files then read metadata in isolate
+    onProgress?.call(
+      const ScanProgress(total: 0, completed: 0, phase: ScanPhase.discovering),
+    );
+
+    final paths = await SonoQueryPlatform.instance.getAudioFilePaths(
+      additionalPaths: config.additionalPaths,
+      excludedPaths: config.excludedPaths,
+    );
+
+    onProgress?.call(
+      ScanProgress(total: paths.length, completed: 0, phase: ScanPhase.reading),
+    );
+
     final results = await Isolate.run(() => _readAllMetadata(paths));
 
     final songs = <Song>[];
-    for (final result in results) {
+    for (var i = 0; i < results.length; i++) {
+      final result = results[i];
       if (result.error != null) {
         onError?.call(result.path, result.error!);
       } else {
-        songs.add(result.song!);
+        var song = result.song!;
+
+        //apply min dur filter (desktop/iOS)
+        if (config.minDuration != null &&
+            song.duration != null &&
+            song.duration! < config.minDuration!) {
+          continue;
+        }
+
+        //apply artist parsing
+        if (config.artistParser != null) {
+          song = song.copyWith(
+            artists: ArtistParser.parse(song.artist, config.artistParser),
+          );
+        }
+        songs.add(song);
+      }
+
+      if (onProgress != null && (i % 50 == 0 || i == results.length - 1)) {
+        onProgress(
+          ScanProgress(
+            total: results.length,
+            completed: i + 1,
+            currentPath: result.path,
+            phase: i == results.length - 1 ? ScanPhase.done : ScanPhase.reading,
+          ),
+        );
       }
     }
     return songs;
@@ -53,23 +131,53 @@ class SonoQuery {
   /// On Android: all songs are emitted at once
   /// On desktop/iOS: songs are emitted in batches of [batchSize]
   ///
+  /// [config] controls filtering and artist parsing
+  /// [onProgress] is called periodically with scan progress
   /// [OnError] is called for each file that fails metadata reading
   static Stream<Song> getSongsStream({
     int batchSize = _defaultBatchSize,
+    ScanConfig config = ScanConfig.none,
+    ScanProgressCallback? onProgress,
     ScanErrorCallback? onError,
   }) async* {
-    final platformSongs = await SonoQueryPlatform.instance
-        .getSongsWithMetadata();
+    final platformSongs = await SonoQueryPlatform.instance.getSongsWithMetadata(
+      minDuration: config.minDuration,
+      excludedPaths: config.excludedPaths,
+    );
 
     if (platformSongs != null) {
-      for (final map in platformSongs) {
-        yield _songFromMap(map);
+      for (var i = 0; i < platformSongs.length; i++) {
+        yield _songFromMap(platformSongs[i], config.artistParser);
+        if (onProgress != null &&
+            (i % 100 == 0 || i == platformSongs.length - 1)) {
+          onProgress(
+            ScanProgress(
+              total: platformSongs.length,
+              completed: i + 1,
+              phase: i == platformSongs.length - 1
+                  ? ScanPhase.done
+                  : ScanPhase.reading,
+            ),
+          );
+        }
       }
       return;
     }
 
-    //fallback: batch-read in isolate, yield per batch
-    final paths = await SonoQueryPlatform.instance.getAudioFilePaths();
+    //fallback: discover files then batch-read in isolate
+    onProgress?.call(
+      const ScanProgress(total: 0, completed: 0, phase: ScanPhase.discovering),
+    );
+
+    final paths = await SonoQueryPlatform.instance.getAudioFilePaths(
+      additionalPaths: config.additionalPaths,
+      excludedPaths: config.excludedPaths,
+    );
+
+    var processed = 0;
+    onProgress?.call(
+      ScanProgress(total: paths.length, completed: 0, phase: ScanPhase.reading),
+    );
 
     for (var i = 0; i < paths.length; i += batchSize) {
       final end = (i + batchSize).clamp(0, paths.length);
@@ -77,10 +185,40 @@ class SonoQuery {
       final results = await Isolate.run(() => _readAllMetadata(batch));
 
       for (final result in results) {
+        processed++;
         if (result.error != null) {
           onError?.call(result.path, result.error!);
         } else {
-          yield result.song!;
+          var song = result.song!;
+
+          //apply min duration filter
+          if (config.minDuration != null &&
+              song.duration != null &&
+              song.duration! < config.minDuration!) {
+            continue;
+          }
+
+          //apply artist parsing
+          if (config.artistParser != null) {
+            song = song.copyWith(
+              artists: ArtistParser.parse(song.artist, config.artistParser),
+            );
+          }
+          yield song;
+        }
+
+        if (onProgress != null &&
+            (processed % 50 == 0 || processed == paths.length)) {
+          onProgress(
+            ScanProgress(
+              total: paths.length,
+              completed: processed,
+              currentPath: result.path,
+              phase: processed == paths.length
+                  ? ScanPhase.done
+                  : ScanPhase.reading,
+            ),
+          );
         }
       }
     }
@@ -94,16 +232,23 @@ class SonoQuery {
     return MetadataReader.readCover(filePath);
   }
 
-  /// Convert platform metadata map to Song
-  static Song _songFromMap(Map<String, dynamic> map) {
+  /// Convert platform metadata map to Song, optionally parsing artists
+  static Song _songFromMap(
+    Map<String, dynamic> map, [
+    ArtistParserConfig? artistParser,
+  ]) {
     final path = map['path'] as String;
     final durationMs = map['duration'] as int?;
     final year = map['year'] as int?;
+    final rawArtist = map['artist'] as String?;
 
     return Song(
       path: path,
       title: (map['title'] as String?) ?? Song.fromPath(path).title,
       artist: map['artist'] as String?,
+      artists: artistParser != null
+          ? ArtistParser.parse(rawArtist, artistParser)
+          : const [],
       album: map['album'] as String?,
       duration: durationMs != null && durationMs > 0
           ? Duration(milliseconds: durationMs)
