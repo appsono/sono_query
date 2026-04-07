@@ -11,6 +11,9 @@ import 'package:sono_query/src/platform/sono_query_platform.dart';
 export 'package:sono_query/src/models/song.dart';
 export 'package:sono_query/src/metadata/metadata_reader.dart';
 export 'package:sono_query/src/platform/sono_query_desktop.dart';
+export 'package:sono_query/src/models/scan_config.dart';
+export 'package:sono_query/src/models/scan_progress.dart';
+export 'package:sono_query/src/helpers/artist_parser.dart';
 
 /// Callback for files that failed metadata reading
 /// Receives file path and the error that occurred
