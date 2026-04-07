@@ -62,7 +62,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val nameIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
 
                 while (genreCursor.moveToNext()) {
-                    val genreName = genreCursor.getString(nameIdx) ?: continue
+                    val genreName = fixMojibake(genreCursor.getString(nameIdx)) ?: continue
                     val memberUri = MediaStore.Audio.Genres.Members.getContentUri(
                         "external", genreCursor.getLong(idIdx)
                     )
@@ -124,18 +124,18 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
             while (cursor.moveToNext()) {
                 val path = cursor.getString(dataIdx)
-                val artist = cursor.getString(artistIdx)
-                val album = cursor.getString(albumIdx)
+                val artist = fixMojibake(cursor.getString(artistIdx))
+                val album = fixMojibake(cursor.getString(albumIdx))
 
                 songs.add(mapOf(
                     "path" to path,
-                    "title" to cursor.getString(titleIdx),
+                    "title" to fixMojibake(cursor.getString(titleIdx)),
                     //MediaStore return <unknown> for missing artist/album
                     "artist" to if (artist == "<unknown>") null else artist,
                     "album" to if (album == "<unknown>") null else album,
                     "duration" to cursor.getLong(durationIdx), //ms
                     "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
-                    "genre" to if (genreIdx >= 0) cursor.getString(genreIdx) else genreLookup[path],
+                    "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
                 ))
             }
         }
@@ -171,5 +171,24 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
         }
         return null
+    }
+}
+
+/// Fixes UTF-8 mojibake: some ID3 taggers store UTF-8 bytes but declare
+/// Latin-1/CP1252. MediaStore reads the declared encoding, producing garbled
+/// text (e.g. "Donâ€™t" instead of "Don't").
+/// Re-encodes as Windows-1252 bytes then decodes as UTF-8.
+private fun fixMojibake(input: String?): String? {
+    if (input == null) return null
+    //quick check: if no bytes > 0x7F, nothing to fix
+    if (input.all { it.code <= 0x7F }) return input
+    return try {
+        val cp1252 = Charsets.ISO_8859_1 //close enough for detection
+        val bytes = input.toByteArray(cp1252)
+        val decoded = String(bytes, Charsets.UTF_8)
+        //reject if decoding produced replacement chars
+        if (decoded.contains('\uFFFD')) input else decoded
+    } catch (_: Exception) {
+        input
     }
 }
