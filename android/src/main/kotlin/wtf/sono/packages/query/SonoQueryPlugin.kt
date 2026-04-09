@@ -180,16 +180,13 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 /// Re-encodes as Windows-1252 bytes then decodes as UTF-8.
 private fun fixMojibake(input: String?): String? {
     if (input == null) return null
-    //only ASCII > nothing to fix
-    if (input.all { it.code <= 0x7F }) return input
-    //chars above 0xFF cant be CP1252 mojibake > leave as-is
-    if (input.any { it.code > 0xFF }) return input
     return try {
         val cp1252 = charset("windows-1252")
         val bytes = input.toByteArray(cp1252)
         val decoded = String(bytes, Charsets.UTF_8)
-        //reject if decoding produced replacement chars
-        if (decoded.contains('\uFFFD')) input else decoded
+        //mojibake always expands: multi-byte UTF-8 sequences become multiple
+        //single-byte CP1252 chars, so a valid fix will always be shorter
+        if (!decoded.contains('\uFFFD') && decoded.length < input.length) decoded else input
     } catch (_: Exception) {
         input
     }
