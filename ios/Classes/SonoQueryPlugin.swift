@@ -93,7 +93,7 @@ public class SonoQueryPlugin: NSObject, FlutterPlugin {
                         break
                     }
                     if let identifier = item.identifier,
-                       identifier == .iTunesMetadataUserGenre || identifier == .id3MetadataGenreType {
+                       identifier == .iTunesMetadataUserGenre || identifier == .id3MetadataContentType {
                         genre = item.stringValue
                         break
                     }
