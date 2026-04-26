@@ -88,6 +88,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.YEAR,
+            MediaStore.Audio.Media.TRACK,
         )
 
         val projection = if (hasGenreColumn) {
@@ -126,6 +127,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val path = cursor.getString(dataIdx)
                 val artist = fixMojibake(cursor.getString(artistIdx))
                 val album = fixMojibake(cursor.getString(albumIdx))
+                val trackIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
 
                 songs.add(mapOf(
                     "path" to path,
@@ -136,6 +138,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     "duration" to cursor.getLong(durationIdx), //ms
                     "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
                     "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
+                    "track" to cursor.getInt(trackIdx).let { if (it == 0) null else it },
                 ))
             }
         }
