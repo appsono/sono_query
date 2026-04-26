@@ -22,6 +22,7 @@ void main() {
       expect(song.artist, isNull);
       expect(song.album, isNull);
       expect(song.duration, isNull);
+      expect(song.trackNumber, isNull);
       expect(song.cover, isNull);
       expect(song.genre, isNull);
       expect(song.releaseDate, isNull);
@@ -64,6 +65,7 @@ void main() {
         artist: 'Artist',
         album: 'Album',
         duration: const Duration(seconds: 4141),
+        trackNumber: 3,
         cover: cover,
         genre: 'Genre',
         releaseDate: DateTime(2026),
@@ -74,6 +76,7 @@ void main() {
       expect(song.artist, 'Artist');
       expect(song.album, 'Album');
       expect(song.duration, const Duration(seconds: 4141));
+      expect(song.trackNumber, 3);
       expect(song.cover, cover);
       expect(song.genre, 'Genre');
       expect(song.releaseDate, DateTime(2026));
@@ -94,6 +97,18 @@ void main() {
         expect(audioExtensions, isNot(contains('.avi')));
         expect(audioExtensions, isNot(contains('.mkv')));
       });
+    });
+
+    test('trackNumber is preserved through copyWith', () {
+      final song = Song(
+        path: '/music/track.mp3',
+        title: 'Track',
+        trackNumber: 5,
+      );
+      final copy = song.copyWith(title: 'Other');
+      expect(copy.trackNumber, 5);
+      final overridden = song.copyWith(trackNumber: 9);
+      expect(overridden.trackNumber, 9);
     });
   });
 }
