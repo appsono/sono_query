@@ -15,6 +15,7 @@ class Song {
   final List<String> artists;
 
   final Duration? duration;
+  final int? trackNumber;
   final Uint8List? cover;
   final String? genre;
   final DateTime? releaseDate;
@@ -28,6 +29,7 @@ class Song {
     this.artists = const [],
     this.album,
     this.duration,
+    this.trackNumber,
     this.cover,
     this.genre,
     this.releaseDate,
@@ -47,6 +49,7 @@ class Song {
     List<String>? artists,
     String? album,
     Duration? duration,
+    int? trackNumber,
     Uint8List? cover,
     String? genre,
     DateTime? releaseDate,
@@ -58,6 +61,7 @@ class Song {
       artists: artists ?? this.artists,
       album: album ?? this.album,
       duration: duration ?? this.duration,
+      trackNumber: trackNumber ?? this.trackNumber,
       cover: cover ?? this.cover,
       genre: genre ?? this.genre,
       releaseDate: releaseDate ?? this.releaseDate,

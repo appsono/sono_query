@@ -16,6 +16,7 @@ class MetadataReader {
         artist: metadata.artist,
         album: metadata.album,
         duration: metadata.duration,
+        trackNumber: metadata.trackNumber,
         cover: null,
         genre: metadata.genres.isNotEmpty ? metadata.genres.first : null,
         releaseDate: metadata.year is DateTime

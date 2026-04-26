@@ -256,6 +256,7 @@ class SonoQuery {
       duration: durationMs != null && durationMs > 0
           ? Duration(milliseconds: durationMs)
           : null,
+      trackNumber: map['trackNumber'] as int?,
       cover: null,
       genre: map['genre'] as String?,
       releaseDate: year != null && year > 0 ? DateTime(year) : null,
