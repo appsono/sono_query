@@ -211,6 +211,10 @@ MP3, M4A, FLAC, OGG, Opus, WAV
 
 Metadata reading by [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=appsono/sono_query&type=date&legend=bottom-right)](https://www.star-history.com/#appsono/sono_query&type=date&legend=bottom-right)
+
 ## LICENSE
 
 MIT
