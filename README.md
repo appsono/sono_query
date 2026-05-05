@@ -207,7 +207,7 @@ Add more directories via `ScanConfig.additionalPaths`.
 
 ## Supported Formats
 
-MP3, M4A, FLAC, OGG, Opus, WAV
+MP3, M4A, FLAC, OGG, Opus, WAV, AIFF/AIFC, APE
 
 Metadata reading by [audio_metadata_reader](https://pub.dev/packages/audio_metadata_reader)
 

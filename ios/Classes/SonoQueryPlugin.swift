@@ -3,7 +3,7 @@ import UIKit
 import AVFoundation
 
 public class SonoQueryPlugin: NSObject, FlutterPlugin {
-    private static let audioExtensions: Set<String> = ["mp3", "flac", "ogg", "m4a", "wav", "opus"]
+    private static let audioExtensions: Set<String> = ["mp3", "flac", "ogg", "m4a", "wav", "opus", "aiff", "aifc", "ape"]
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "sono_query", binaryMessenger: registrar.messenger())

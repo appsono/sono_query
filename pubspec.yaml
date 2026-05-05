@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  audio_metadata_reader: ^1.4.2
+  audio_metadata_reader: ^1.6.0
   plugin_platform_interface: ^2.1.8
   path: ^1.9.1
 
