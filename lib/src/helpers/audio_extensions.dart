@@ -6,7 +6,7 @@ const audioExtensions = [
   // read + non writable
   '.ogg', '.opus',
   // read only
-  '.aiff' '.aifc', '.ape'
+  '.aiff', '.aifc', '.ape',
 ];
 
 // .mp4 would be supported, but I'm only focusing
