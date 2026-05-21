@@ -17,7 +17,7 @@ public class SonoQueryPlugin: NSObject, FlutterPlugin {
             result(getAudioFilePaths())
         case "getSongsWithMetadata":
             let args = call.arguments as? [String: Any]
-            let minDurationMs = args?["minDurationms"] as? Int
+            let minDurationMs = args?["minDurationMs"] as? Int
             let excludedPaths = args?["excludedPaths"] as? [String] ?? []
             result(getSongsWithMetadata(minDurationMs: minDurationMs, excludedPaths: excludedPaths))
         default:
