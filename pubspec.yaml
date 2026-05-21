@@ -1,11 +1,12 @@
 name: sono_query
 description: "Audio file discovery and metadata reading for Sono."
-version: 0.4.2
+
+version: 0.5.0
 homepage: https://github.com/appsono/sono_query
 
 environment:
-  sdk: ^3.11.1
-  flutter: ">=3.29.0"
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
