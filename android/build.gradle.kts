@@ -17,8 +17,7 @@ android {
 }
 
 kotlin {
-    compileOptions {
+    compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
-
