@@ -37,12 +37,4 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
     );
     return bytes;
   }
-
-  //@override
-  //Future<Map<String, String>?> getGenres() async {
-  //  final result = await _channel.invokeMapMethod<String, String>('getGenres');
-  //  return result;
-  //}
-  //
-  //TODO: Implement!!!
 }
