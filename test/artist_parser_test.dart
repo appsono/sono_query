@@ -1,8 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sono_query/sono_query.dart';
-import 'package:sono_query/src/helpers/artist_parser.dart';
-import 'package:sono_query/src/models/scan_config.dart';
-import 'package:sono_query/src/models/scan_progress.dart';
 
 void main() {
   group('ArtistParser', () {
