@@ -37,4 +37,9 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
     );
     return bytes;
   }
+
+  @override
+  Future<void> rescanFile(String filePath) async {
+    await _channel.invokeMethod<void>('rescanFile', filePath);
+  }
 }

@@ -34,6 +34,13 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val filePath = call.arguments as String
                 result.success(getCoverFromMediaStore(filePath))
             }
+            "rescanFile" -> {
+                val filePath = call.arguments as String
+                android.media.MediaScannerConnection.scanFile(
+                    context, arrayOf(filePath), null, null
+                )
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }

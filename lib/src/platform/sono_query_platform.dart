@@ -47,4 +47,6 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   /// Returns map of file path => genre from MediaStore
   /// Returns null if not supported
   Future<Map<String, String>?> getGenres() async => null;
+
+  Future<void> rescanFile(String filePath) async {}
 }

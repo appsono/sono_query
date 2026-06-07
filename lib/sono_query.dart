@@ -6,6 +6,7 @@ import 'package:sono_query/src/models/scan_config.dart';
 import 'package:sono_query/src/models/scan_progress.dart';
 import 'package:sono_query/src/models/song.dart';
 import 'package:sono_query/src/metadata/metadata_reader.dart';
+import 'package:audio_metadata_reader/audio_metadata_reader.dart' show Picture;
 import 'package:sono_query/src/platform/sono_query_platform.dart';
 
 export 'package:sono_query/src/models/song.dart';
@@ -14,6 +15,8 @@ export 'package:sono_query/src/platform/sono_query_desktop.dart';
 export 'package:sono_query/src/models/scan_config.dart';
 export 'package:sono_query/src/models/scan_progress.dart';
 export 'package:sono_query/src/helpers/artist_parser.dart';
+export 'package:audio_metadata_reader/audio_metadata_reader.dart'
+    show Picture, PictureType;
 
 /// Callback for files that failed metadata reading
 /// Receives file path and the error that occurred
@@ -233,6 +236,35 @@ class SonoQuery {
   /// then falls back to MediaStore on Android
   static Future<Uint8List?> getCover(String filePath) async {
     return MetadataReader.readCover(filePath);
+  }
+
+  /// Update tags on a song file. Returns false if format is non-writeable
+  /// (OGG, Opus, AIFF, APE) or write failed. Trigger MediaStore rescan
+  /// on Android
+  static Future<bool> updateTags(
+    String filePath, {
+    String? title,
+    String? artist,
+    String? album,
+    int? trackNumber,
+    DateTime? year,
+    List<String>? genres,
+    List<Picture>? pictures,
+  }) async {
+    final ok = MetadataReader.writeSync(
+      filePath,
+      title: title,
+      artist: artist,
+      album: album,
+      trackNumber: trackNumber,
+      year: year,
+      genres: genres,
+      pictures: pictures,
+    );
+    if (ok) {
+      await SonoQueryPlatform.instance.rescanFile(filePath);
+    }
+    return ok;
   }
 
   /// Convert platform metadata map to Song, optionally parsing artists

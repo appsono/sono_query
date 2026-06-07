@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:path/path.dart' as p;
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
 import 'package:sono_query/src/models/song.dart';
+import 'package:sono_query/src/helpers/audio_extensions.dart';
 import 'package:sono_query/src/platform/sono_query_platform.dart';
 
 class MetadataReader {
@@ -72,6 +74,38 @@ class MetadataReader {
       return await SonoQueryPlatform.instance.getCoverFromMediaStore(filePath);
     } catch (_) {
       return null;
+    }
+  }
+
+  static bool canWrite(String filePath) =>
+      writeableExtensions.contains(p.extension(filePath).toLowerCase());
+
+  /// Update tags. Returns false if format is non-writeable or write throws
+  /// Pass null to leave a field empty. Rewrites file in place
+  static bool writeSync(
+    String filePath, {
+    String? title,
+    String? artist,
+    String? album,
+    int? trackNumber,
+    DateTime? year,
+    List<String>? genres,
+    List<Picture>? pictures,
+  }) {
+    if (!canWrite(filePath)) return false;
+    try {
+      updateMetadata(File(filePath), (m) {
+        if (title != null) m.setTitle(title);
+        if (artist != null) m.setArtist(artist);
+        if (album != null) m.setAlbum(album);
+        if (trackNumber != null) m.setTrackNumber(trackNumber);
+        if (year != null) m.setYear(year);
+        if (genres != null) m.setGenres(genres);
+        if (pictures != null) m.setPictures(pictures);
+      });
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }
