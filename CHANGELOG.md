@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- Adds SonoQuery.updateTags() for MP3, M4A, FLAC, WAV
+- Re-exports Picture and PictureType
+- Triggers MediaStore rescan on Android after write
+- Lowers sdk constraint to ^3.11.1
+
 ## 0.5.0
 
 - Migrates to built-in Kotlin. The plugin no longer applies the
