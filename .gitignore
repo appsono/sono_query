@@ -13,3 +13,4 @@ android/.kotlin/
 android/local.properties
 android/kls_database.db
 **/.cxx/
+test/fixtures/
