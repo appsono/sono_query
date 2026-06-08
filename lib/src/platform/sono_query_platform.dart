@@ -49,4 +49,35 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   Future<Map<String, String>?> getGenres() async => null;
 
   Future<void> rescanFile(String filePath) async {}
+
+  /// Returns MediaStore content URI for [path], or null if file is
+  /// not indexed (e.g, just downloadd, not yet scanned)
+  ///
+  /// Android only. Returns null on other platforms
+  Future<String?> resolveContentUri(String path) async => null;
+
+  /// Copies file at [path] into apps private cache dir and
+  /// returns cached files absolute path. Caller is responsible for
+  /// deleting cache file when done
+  ///
+  /// On Android: prefers direc file read when file is in apps own scope
+  /// otherwise falls bac to ContentResolver
+  ///
+  /// Android only. Throws UnsupporedError on other platforms
+  Future<String> copyToAppCache(String path) async {
+    throw UnsupportedError('copyToAppCache is Android-only');
+  }
+
+  /// Wites bytes at [cachePath] back to [originalPath]
+  ///
+  /// On Android (11+): triggers system "Allow Sono to modify this audio file"
+  /// dialog. returns true on success (user granted + write completed),
+  /// false if user denied. throws IO errors
+  ///
+  /// also notifies MediaScanner on success so other apps see new tags
+  ///
+  /// Android only. Throw UnsupportedError on other platforms
+  Future<bool> commitFromCache(String cachePath, String originalPath) async {
+    throw UnsupportedError('commitFromCache is Android-only');
+  }
 }

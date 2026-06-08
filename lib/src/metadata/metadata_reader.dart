@@ -104,8 +104,80 @@ class MetadataReader {
         if (pictures != null) m.setPictures(pictures);
       });
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      print('sono_query writeSync failed for $filePath: $e\n$st');
       return false;
+    }
+  }
+
+  /// Updated tags asynchronously, handling android scoped storage
+  ///
+  /// retunrs false if format is unsupported, permission is denied, or
+  /// an IO operation fails
+  ///
+  /// pass null to leave a field unchanged
+  static Future<bool> writeAsync(
+    String filePath, {
+    String? title,
+    String? artist,
+    String? album,
+    int? trackNumber,
+    DateTime? year,
+    List<String>? genres,
+    List<Picture>? pictures,
+  }) async {
+    if (!canWrite(filePath)) return false;
+
+    //non-android platforms: writeSync writes directly with no permission gate
+    if (!Platform.isAndroid) {
+      return writeSync(
+        filePath,
+        title: title,
+        artist: artist,
+        album: album,
+        trackNumber: trackNumber,
+        year: year,
+        genres: genres,
+        pictures: pictures,
+      );
+    }
+
+    //android: copy > writeSync(scratch) > commit
+    String? cachePath;
+    try {
+      cachePath = await SonoQueryPlatform.instance.copyToAppCache(filePath);
+
+      final wroteScratch = writeSync(
+        cachePath,
+        title: title,
+        artist: artist,
+        album: album,
+        trackNumber: trackNumber,
+        year: year,
+        genres: genres,
+        pictures: pictures,
+      );
+      if (!wroteScratch) {
+        print('writeAsync: writeSync on cache copy failed for $filePath');
+        return false;
+      }
+
+      final committed = await SonoQueryPlatform.instance.commitFromCache(
+        cachePath,
+        filePath,
+      );
+      return committed;
+    } catch (e, st) {
+      print('writeAsync failed for $filePath: $e\n$st');
+      return false;
+    } finally {
+      if (cachePath != null) {
+        try {
+          File(cachePath).deleteSync();
+        } catch (_) {
+          //best effort cleanup, ignore errors
+        }
+      }
     }
   }
 }

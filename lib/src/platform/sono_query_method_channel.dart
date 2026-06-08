@@ -42,4 +42,29 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
   Future<void> rescanFile(String filePath) async {
     await _channel.invokeMethod<void>('rescanFile', filePath);
   }
+
+  @override
+  Future<String?> resolveContentUri(String path) async {
+    return _channel.invokeMethod<String>('resolveContentUri', {'path': path});
+  }
+
+  @override
+  Future<String> copyToAppCache(String path) async {
+    final result = await _channel.invokeMethod<String>('copyToAppCache', {
+      'path': path,
+    });
+    if (result == null) {
+      throw StateError('copyToAppCache returned null for $path');
+    }
+    return result;
+  }
+
+  @override
+  Future<bool> commitFromCache(String cachePath, String originalPath) async {
+    final result = await _channel.invokeMethod<bool>('commitFromCache', {
+      'cachePath': cachePath,
+      'originalPath': originalPath,
+    });
+    return result ?? false;
+  }
 }

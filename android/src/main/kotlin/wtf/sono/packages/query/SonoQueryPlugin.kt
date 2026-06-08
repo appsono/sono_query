@@ -1,16 +1,53 @@
 package wtf.sono.packages.query
 
+import android.app.Activity
+import android.app.PendingIntent
+import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
+import android.content.IntentSender
+import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.PluginRegistry
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.UUID
 
-class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+class SonoQueryPlugin :
+    FlutterPlugin,
+    ActivityAware,
+    MethodChannel.MethodCallHandler,
+    PluginRegistry.ActivityResultListener {
+
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
 
+    //activity reference, set/cleared by ActivityAware callbacks
+    //null whenever flutter is detached from an activity (e.g. during config changes)
+    private var activity: Activity? = null
+    private var activityBinding: ActivityPluginBinding? = null
+
+    //pending result for system "allow write?" dialog
+    //only one in flight at a time, second request rejects with already-in-progress
+    private var pendingWriteResult: MethodChannel.Result? = null
+    private var pendingCachePath: String? = null
+    private var pendingOriginalPath: String? = null
+    private var pendingUri: Uri? = null
+
+    companion object {
+        private const val WRITE_REQUEST_CODE = 41001
+    }
+
+    // ==== FlutterPlugin ====
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "sono_query")
@@ -21,6 +58,35 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         channel.setMethodCallHandler(null)
     }
 
+    // ==== ActivityAware ====
+    //these four callbacks hand us an Activity reference whenever one exists
+    //we register/unregister an ActivityResultListener so we can receive the
+    //result of the system permission dialog launched by commitFromCache
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        activityBinding = binding
+        binding.addActivityResultListener(this)
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activityBinding?.removeActivityResultListener(this)
+        activity = null
+        activityBinding = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        activityBinding = binding
+        binding.addActivityResultListener(this)
+    }
+
+    override fun onDetachedFromActivity() {
+        activityBinding?.removeActivityResultListener(this)
+        activity = null
+        activityBinding = null
+    }
+
+    // ==== method dispatch ====
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "getSongsWithMetadata" -> {
@@ -36,14 +102,19 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
             "rescanFile" -> {
                 val filePath = call.arguments as String
-                android.media.MediaScannerConnection.scanFile(
+                MediaScannerConnection.scanFile(
                     context, arrayOf(filePath), null, null
                 )
                 result.success(null)
             }
+            "resolveContentUri" -> resolveContentUri(call, result)
+            "copyToAppCache" -> copyToAppCache(call, result)
+            "commitFromCache" -> commitFromCache(call, result)
             else -> result.notImplemented()
         }
     }
+
+    // ==== scan / cover / rescan ====
 
     /// Returns all metadata from MediaStore in one query
     /// On API 30+: genre is included directly (AudioColumns.GENRE)
@@ -121,7 +192,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             selectionParts.joinToString(" AND "),
             selectionArgs.toTypedArray(),
             null
-        )?.use {cursor ->
+        )?.use { cursor ->
             val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             val titleIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -167,7 +238,7 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
-                val uri = android.content.ContentUris.withAppendedId(
+                val uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
                 )
                 try {
@@ -181,6 +252,260 @@ class SonoQueryPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
         }
         return null
+    }
+
+    // ==== write plumbing ====
+
+    //path -> MediaStore content URI string, or null when not indexed
+    private fun resolveContentUri(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        if (path == null) {
+            result.error("BAD_ARGS", "path required", null)
+            return
+        }
+        val uri = mediaStoreUriFor(path)
+        result.success(uri?.toString())
+    }
+
+    private fun mediaStoreUriFor(path: String): Uri? {
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val projection = arrayOf(MediaStore.Audio.Media._ID)
+        val selection = "${MediaStore.Audio.Media.DATA} = ?"
+        val selectionArgs = arrayOf(path)
+
+        context.contentResolver.query(
+            collection,
+            projection,
+            selection,
+            selectionArgs,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+                return ContentUris.withAppendedId(collection, id)
+            }
+        }
+        return null
+    }
+
+    //copies original files bytes into app-private cache dir
+    //returns cache files absolute path. caller is responsible for
+    //deleting cache file when done. prefers direct File read when
+    //file is in apps own scope, otherwise goes via ContentResolver
+    //(which works without permission for read)
+    private fun copyToAppCache(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path")
+        if (path == null) {
+            result.error("BAD_ARGS", "path required", null)
+            return
+        }
+
+        val basename = File(path).name
+        val cacheFile = File(context.cacheDir, "edit_${UUID.randomUUID()}_$basename")
+
+        try {
+            val directFile = File(path)
+            if (directFile.canRead()) {
+                FileInputStream(directFile).use { input ->
+                    FileOutputStream(cacheFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } else {
+                val uri = mediaStoreUriFor(path)
+                if (uri == null) {
+                    result.error(
+                        "NOT_FOUND",
+                        "file not readable and not in MediaStore: $path",
+                        null
+                    )
+                    return
+                }
+                context.contentResolver.openInputStream(uri).use { input ->
+                    if (input == null) {
+                        result.error("OPEN_FAILED", "could not open input stream", null)
+                        return
+                    }
+                    FileOutputStream(cacheFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            result.success(cacheFile.absolutePath)
+        } catch (e: Exception) {
+            //clean up partial cache on failure
+            cacheFile.delete()
+            result.error("COPY_FAILED", e.message, null)
+        }
+    }
+
+    //writes the cache files bytes back to original path
+    //tries direct File write first (works for files in apps own scope);
+    //on Android 11+ falls back to MediaStore.createWriteRequest which shows
+    //a system "allow Sono to modify this audio file?" dialog
+    //on success also notifies MediaScanner so other apps see new tags
+    private fun commitFromCache(call: MethodCall, result: MethodChannel.Result) {
+        val cachePath = call.argument<String>("cachePath")
+        val originalPath = call.argument<String>("originalPath")
+        if (cachePath == null || originalPath == null) {
+            result.error("BAD_ARGS", "cachePath and originalPath required", null)
+            return
+        }
+
+        //try direct write first, falls through to ContentResolver+dialog on PermissionDenied
+        val directFile = File(originalPath)
+        if (directFile.canWrite()) {
+            try {
+                FileInputStream(File(cachePath)).use { input ->
+                    FileOutputStream(directFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                scanFile(originalPath)
+                result.success(true)
+                return
+            } catch (_: SecurityException) {
+                //fall through to MediaStore path
+            } catch (e: Exception) {
+                result.error("WRITE_FAILED", e.message, null)
+                return
+            }
+        }
+
+        //MediaStore path
+        val uri = mediaStoreUriFor(originalPath)
+        if (uri == null) {
+            result.error("NOT_FOUND", "not in MediaStore: $originalPath", null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            requestAndWriteApi30(uri, cachePath, originalPath, result)
+        } else {
+            //pre-Android 11: try direct ContentResolver write, no per-file dialog
+            tryDirectContentResolverWrite(uri, cachePath, originalPath, result)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun requestAndWriteApi30(
+        uri: Uri,
+        cachePath: String,
+        originalPath: String,
+        result: MethodChannel.Result
+    ) {
+        val act = activity
+        if (act == null) {
+            result.error("NO_ACTIVITY", "activity not attached", null)
+            return
+        }
+        if (pendingWriteResult != null) {
+            result.error("BUSY", "another write request is in progress", null)
+            return
+        }
+
+        //pending intent that, when launched, shows system dialog
+        val pendingIntent: PendingIntent =
+            MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
+
+        //store state so onActivityResult can complete operation later
+        pendingWriteResult = result
+        pendingCachePath = cachePath
+        pendingOriginalPath = originalPath
+        pendingUri = uri
+
+        try {
+            act.startIntentSenderForResult(
+                pendingIntent.intentSender,
+                WRITE_REQUEST_CODE,
+                null, 0, 0, 0
+            )
+        } catch (e: IntentSender.SendIntentException) {
+            pendingWriteResult = null
+            pendingCachePath = null
+            pendingOriginalPath = null
+            pendingUri = null
+            result.error("INTENT_FAILED", e.message, null)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != WRITE_REQUEST_CODE) return false
+
+        val result = pendingWriteResult
+        val cachePath = pendingCachePath
+        val originalPath = pendingOriginalPath
+        val uri = pendingUri
+
+        pendingWriteResult = null
+        pendingCachePath = null
+        pendingOriginalPath = null
+        pendingUri = null
+
+        if (result == null || cachePath == null || originalPath == null || uri == null) {
+            return true //consumed the result even if state was wrong
+        }
+
+        if (resultCode != Activity.RESULT_OK) {
+            result.success(false) //user denied
+            return true
+        }
+
+        //user granted: stream cache file back into original via ContentResolver
+        try {
+            context.contentResolver.openOutputStream(uri, "wt").use { output ->
+                if (output == null) {
+                    result.error("OPEN_FAILED", "could not open output stream", null)
+                    return true
+                }
+                FileInputStream(File(cachePath)).use { input ->
+                    input.copyTo(output)
+                }
+            }
+            scanFile(originalPath)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("WRITE_FAILED", e.message, null)
+        }
+        return true
+    }
+
+    private fun tryDirectContentResolverWrite(
+        uri: Uri,
+        cachePath: String,
+        originalPath: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            //on API 29 needs requestLegacyExternalStorage=true in app manifest
+            //on API 28 and below works with WRITE_EXTERNAL_STORAGE granted
+            context.contentResolver.openOutputStream(uri, "wt").use { output ->
+                if (output == null) {
+                    result.error("OPEN_FAILED", "could not open output stream", null)
+                    return
+                }
+                FileInputStream(File(cachePath)).use { input ->
+                    input.copyTo(output)
+                }
+            }
+            scanFile(originalPath)
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("WRITE_FAILED", e.message, null)
+        }
+    }
+
+    private fun scanFile(path: String) {
+        try {
+            MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+        } catch (_: Exception) {
+            //best-effort, do not fail whole operation
+        }
     }
 }
 

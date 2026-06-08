@@ -17,6 +17,7 @@ export 'package:sono_query/src/models/scan_progress.dart';
 export 'package:sono_query/src/helpers/artist_parser.dart';
 export 'package:audio_metadata_reader/audio_metadata_reader.dart'
     show Picture, PictureType;
+export 'package:sono_query/src/platform/sono_query_platform.dart';
 
 /// Callback for files that failed metadata reading
 /// Receives file path and the error that occurred
