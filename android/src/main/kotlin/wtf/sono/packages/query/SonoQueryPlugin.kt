@@ -26,7 +26,7 @@ class SonoQueryPlugin :
     FlutterPlugin,
     ActivityAware,
     MethodChannel.MethodCallHandler,
- PluginRegistry.ActivityResultListener {
+    PluginRegistry.ActivityResultListener {
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
 
@@ -277,8 +277,11 @@ class SonoQueryPlugin :
 
     // loadThumbnail is API 29+; NoSuchMethodError is an Error and was NOT
     // caught by the catch(Exception) below, so this also fixes a pre-Q crash
-    private fun getCoverFromMediaStore(filePath: String, maxDim: Int = 512): ByteArray? {
-       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+    private fun getCoverFromMediaStore(
+        filePath: String,
+        maxDim: Int = 512,
+    ): ByteArray? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val projection = arrayOf(MediaStore.Audio.Media._ID)
         val selection = "${MediaStore.Audio.Media.DATA} = ?"
         val selectionArgs = arrayOf(filePath)
