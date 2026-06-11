@@ -27,7 +27,6 @@ class SonoQueryPlugin :
     ActivityAware,
     MethodChannel.MethodCallHandler,
     PluginRegistry.ActivityResultListener {
-
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
 
@@ -87,30 +86,51 @@ class SonoQueryPlugin :
     }
 
     // ==== method dispatch ====
-    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    override fun onMethodCall(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
         when (call.method) {
             "getSongsWithMetadata" -> {
                 val args = call.arguments as? Map<*, *>
                 val minDurationMs = (args?.get("minDurationMs") as? Number)?.toLong()
-                val excludedPaths = (args?.get("excludedPaths") as? List<*>)
-                    ?.filterIsInstance<String>() ?: emptyList()
+                val excludedPaths =
+                    (args?.get("excludedPaths") as? List<*>)
+                        ?.filterIsInstance<String>() ?: emptyList()
                 result.success(getSongsWithMetadata(minDurationMs, excludedPaths))
             }
+
             "getCoverFromMediaStore" -> {
                 val filePath = call.arguments as String
                 result.success(getCoverFromMediaStore(filePath))
             }
+
             "rescanFile" -> {
                 val filePath = call.arguments as String
                 MediaScannerConnection.scanFile(
-                    context, arrayOf(filePath), null, null
+                    context,
+                    arrayOf(filePath),
+                    null,
+                    null,
                 )
                 result.success(null)
             }
-            "resolveContentUri" -> resolveContentUri(call, result)
-            "copyToAppCache" -> copyToAppCache(call, result)
-            "commitFromCache" -> commitFromCache(call, result)
-            else -> result.notImplemented()
+
+            "resolveContentUri" -> {
+                resolveContentUri(call, result)
+            }
+
+            "copyToAppCache" -> {
+                copyToAppCache(call, result)
+            }
+
+            "commitFromCache" -> {
+                commitFromCache(call, result)
+            }
+
+            else -> {
+                result.notImplemented()
+            }
         }
     }
 
@@ -119,61 +139,71 @@ class SonoQueryPlugin :
     // Returns all metadata from MediaStore in one query
     // On API 30+: genre is included directly (AudioColumns.GENRE)
     // On API < 30: genre is resolved from Genres join tables
-    // 
+    //
     // [minDurationMs] > skip songs shorter than this, defaults to > 0
     // [excludedPaths] > skip songs whose path starts with any of these prefixes
     private fun getSongsWithMetadata(
         minDurationMs: Long?,
-        excludedPaths: List<String>
+        excludedPaths: List<String>,
     ): List<Map<String, Any?>> {
         val songs = mutableListOf<Map<String, Any?>>()
         val hasGenreColumn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
         val genreLookup = mutableMapOf<String, String>()
         if (!hasGenreColumn) {
-            context.contentResolver.query(
-                MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME),
-                null, null, null
-            )?.use { genreCursor ->
-                val idIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
-                val nameIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+            context.contentResolver
+                .query(
+                    MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { genreCursor ->
+                    val idIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                    val nameIdx = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
 
-                while (genreCursor.moveToNext()) {
-                    val genreName = fixMojibake(genreCursor.getString(nameIdx)) ?: continue
-                    val memberUri = MediaStore.Audio.Genres.Members.getContentUri(
-                        "external", genreCursor.getLong(idIdx)
-                    )
+                    while (genreCursor.moveToNext()) {
+                        val genreName = fixMojibake(genreCursor.getString(nameIdx)) ?: continue
+                        val memberUri =
+                            MediaStore.Audio.Genres.Members.getContentUri(
+                                "external",
+                                genreCursor.getLong(idIdx),
+                            )
 
-                    context.contentResolver.query(
-                        memberUri,
-                        arrayOf(MediaStore.Audio.Media.DATA),
-                        null, null, null
-                    )?.use { memberCursor ->
-                        val dataIdx = memberCursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-                        while (memberCursor.moveToNext()) {
-                            memberCursor.getString(dataIdx)?.let { genreLookup[it] = genreName }
-                        }
+                        context.contentResolver
+                            .query(
+                                memberUri,
+                                arrayOf(MediaStore.Audio.Media.DATA),
+                                null,
+                                null,
+                                null,
+                            )?.use { memberCursor ->
+                                val dataIdx = memberCursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                                while (memberCursor.moveToNext()) {
+                                    memberCursor.getString(dataIdx)?.let { genreLookup[it] = genreName }
+                                }
+                            }
                     }
                 }
+        }
+
+        val baseProjection =
+            arrayOf(
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.YEAR,
+                MediaStore.Audio.Media.TRACK,
+            )
+
+        val projection =
+            if (hasGenreColumn) {
+                baseProjection + MediaStore.Audio.Media.GENRE
+            } else {
+                baseProjection
             }
-        }
-
-        val baseProjection = arrayOf(
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.YEAR,
-            MediaStore.Audio.Media.TRACK,
-        )
-
-        val projection = if (hasGenreColumn) {
-            baseProjection + MediaStore.Audio.Media.GENRE
-        } else {
-            baseProjection
-        }
 
         // build WHERE clause: min duration + path exclusions
         val durationThreshold = minDurationMs ?: 0L
@@ -186,40 +216,43 @@ class SonoQueryPlugin :
             selectionArgs.add("${path.trimEnd('/')}/%")
         }
 
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selectionParts.joinToString(" AND "),
-            selectionArgs.toTypedArray(),
-            null
-        )?.use { cursor ->
-            val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val titleIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val albumIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val durationIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val yearIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-            val genreIdx = if (hasGenreColumn) cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE) else -1
+        context.contentResolver
+            .query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selectionParts.joinToString(" AND "),
+                selectionArgs.toTypedArray(),
+                null,
+            )?.use { cursor ->
+                val dataIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val titleIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val durationIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val yearIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+                val genreIdx = if (hasGenreColumn) cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE) else -1
 
-            while (cursor.moveToNext()) {
-                val path = cursor.getString(dataIdx)
-                val artist = fixMojibake(cursor.getString(artistIdx))
-                val album = fixMojibake(cursor.getString(albumIdx))
-                val trackIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+                while (cursor.moveToNext()) {
+                    val path = cursor.getString(dataIdx)
+                    val artist = fixMojibake(cursor.getString(artistIdx))
+                    val album = fixMojibake(cursor.getString(albumIdx))
+                    val trackIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
 
-                songs.add(mapOf(
-                    "path" to path,
-                    "title" to fixMojibake(cursor.getString(titleIdx)),
-                    // MediaStore return <unknown> for missing artist/album
-                    "artist" to if (artist == "<unknown>") null else artist,
-                    "album" to if (album == "<unknown>") null else album,
-                    "duration" to cursor.getLong(durationIdx), // ms
-                    "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
-                    "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
-                    "track" to cursor.getInt(trackIdx).let { if (it == 0) null else it },
-                ))
+                    songs.add(
+                        mapOf(
+                            "path" to path,
+                            "title" to fixMojibake(cursor.getString(titleIdx)),
+                            // MediaStore return <unknown> for missing artist/album
+                            "artist" to if (artist == "<unknown>") null else artist,
+                            "album" to if (album == "<unknown>") null else album,
+                            "duration" to cursor.getLong(durationIdx), // ms
+                            "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
+                            "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
+                            "track" to cursor.getInt(trackIdx).let { if (it == 0) null else it },
+                        ),
+                    )
+                }
             }
-        }
 
         return songs
     }
@@ -229,35 +262,41 @@ class SonoQueryPlugin :
         val selection = "${MediaStore.Audio.Media.DATA} = ?"
         val selectionArgs = arrayOf(filePath)
 
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
-                val uri = ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
-                )
-                try {
-                    val bitmap = context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
-                    val stream = java.io.ByteArrayOutputStream()
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, stream)
-                    return stream.toByteArray()
-                } catch (e: Exception) {
-                    return null
+        context.contentResolver
+            .query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+                    val uri =
+                        ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            id,
+                        )
+                    try {
+                        val bitmap = context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                        val stream = java.io.ByteArrayOutputStream()
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, stream)
+                        return stream.toByteArray()
+                    } catch (e: Exception) {
+                        return null
+                    }
                 }
             }
-        }
         return null
     }
 
     // ==== write plumbing ====
 
     // path -> MediaStore content URI string, or null when not indexed
-    private fun resolveContentUri(call: MethodCall, result: MethodChannel.Result) {
+    private fun resolveContentUri(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
         val path = call.argument<String>("path")
         if (path == null) {
             result.error("BAD_ARGS", "path required", null)
@@ -268,28 +307,30 @@ class SonoQueryPlugin :
     }
 
     private fun mediaStoreUriFor(path: String): Uri? {
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
+        val collection =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            }
 
         val projection = arrayOf(MediaStore.Audio.Media._ID)
         val selection = "${MediaStore.Audio.Media.DATA} = ?"
         val selectionArgs = arrayOf(path)
 
-        context.contentResolver.query(
-            collection,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
-                return ContentUris.withAppendedId(collection, id)
+        context.contentResolver
+            .query(
+                collection,
+                projection,
+                selection,
+                selectionArgs,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+                    return ContentUris.withAppendedId(collection, id)
+                }
             }
-        }
         return null
     }
 
@@ -298,7 +339,10 @@ class SonoQueryPlugin :
     // deleting cache file when done. prefers direct File read when
     // file is in apps own scope, otherwise goes via ContentResolver
     // (which works without permission for read)
-    private fun copyToAppCache(call: MethodCall, result: MethodChannel.Result) {
+    private fun copyToAppCache(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
         val path = call.argument<String>("path")
         if (path == null) {
             result.error("BAD_ARGS", "path required", null)
@@ -322,7 +366,7 @@ class SonoQueryPlugin :
                     result.error(
                         "NOT_FOUND",
                         "file not readable and not in MediaStore: $path",
-                        null
+                        null,
                     )
                     return
                 }
@@ -349,7 +393,10 @@ class SonoQueryPlugin :
     // on Android 11+ falls back to MediaStore.createWriteRequest which shows
     // a system "allow Sono to modify this audio file?" dialog
     // on success also notifies MediaScanner so other apps see new tags
-    private fun commitFromCache(call: MethodCall, result: MethodChannel.Result) {
+    private fun commitFromCache(
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
         val cachePath = call.argument<String>("cachePath")
         val originalPath = call.argument<String>("originalPath")
         if (cachePath == null || originalPath == null) {
@@ -397,7 +444,7 @@ class SonoQueryPlugin :
         uri: Uri,
         cachePath: String,
         originalPath: String,
-        result: MethodChannel.Result
+        result: MethodChannel.Result,
     ) {
         val act = activity
         if (act == null) {
@@ -423,7 +470,10 @@ class SonoQueryPlugin :
             act.startIntentSenderForResult(
                 pendingIntent.intentSender,
                 WRITE_REQUEST_CODE,
-                null, 0, 0, 0
+                null,
+                0,
+                0,
+                0,
             )
         } catch (e: IntentSender.SendIntentException) {
             pendingWriteResult = null
@@ -434,7 +484,11 @@ class SonoQueryPlugin :
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+    ): Boolean {
         if (requestCode != WRITE_REQUEST_CODE) return false
 
         val result = pendingWriteResult
@@ -479,7 +533,7 @@ class SonoQueryPlugin :
         uri: Uri,
         cachePath: String,
         originalPath: String,
-        result: MethodChannel.Result
+        result: MethodChannel.Result,
     ) {
         try {
             // on API 29 needs requestLegacyExternalStorage=true in app manifest
