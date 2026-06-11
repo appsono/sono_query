@@ -22,6 +22,12 @@ class Song {
 
   final String? album;
 
+  /// File mtime in ms since epoch
+  final int? mtimeMs;
+
+  /// File sitz bytes
+  final int? fileSize;
+
   const Song({
     required this.path,
     required this.title,
@@ -33,6 +39,8 @@ class Song {
     this.cover,
     this.genre,
     this.releaseDate,
+    this.mtimeMs,
+    this.fileSize,
   });
 
   /// Fallback constructor from just a file path when metadata cant be read
@@ -53,6 +61,8 @@ class Song {
     Uint8List? cover,
     String? genre,
     DateTime? releaseDate,
+    int? mtimeMs,
+    int? fileSize,
   }) {
     return Song(
       path: path ?? this.path,
@@ -65,6 +75,8 @@ class Song {
       cover: cover ?? this.cover,
       genre: genre ?? this.genre,
       releaseDate: releaseDate ?? this.releaseDate,
+      mtimeMs: mtimeMs ?? this.mtimeMs,
+      fileSize: fileSize ?? this.fileSize,
     );
   }
 

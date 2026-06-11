@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -24,6 +25,11 @@ export 'package:sono_query/src/platform/sono_query_platform.dart';
 typedef ScanErrorCallback = void Function(String path, Object error);
 
 class SonoQuery {
+  /// Canoncal file fingerprint (used by scan skip)
+  /// App stores this per song and passes the path => fingerprint map
+  /// back via [getSongsStream]s knownFingerprints paramter
+  static String fingerprint(int mtimeMs, int size) => '$mtimeMs:$size';
+
   /// Default batch size for streaming metadata reads
   static const _defaultBatchSize = 50;
 
@@ -144,6 +150,8 @@ class SonoQuery {
   static Stream<Song> getSongsStream({
     int batchSize = _defaultBatchSize,
     ScanConfig config = ScanConfig.none,
+    Map<String, String>? knownFingerprints,
+    void Function(List<String> paths)? onUnchanged,
     ScanProgressCallback? onProgress,
     ScanErrorCallback? onError,
   }) async* {
@@ -181,13 +189,29 @@ class SonoQuery {
       excludedPaths: config.excludedPaths,
     );
 
+    //skip unchanged files by mtime+size fingerprint; stat work runs in an isolate
+    var toRead = paths;
     var processed = 0;
+    if (knownFingerprints != null && knownFingerprints.isNotEmpty) {
+      final known = knownFingerprints;
+      final parts = await Isolate.run(
+        () => _partitionByFingerprint(paths, known),
+      );
+      toRead = parts.changed;
+      processed = parts.unchanged.length;
+      if (parts.unchanged.isNotEmpty) onUnchanged?.call(parts.unchanged);
+    }
+
     onProgress?.call(
-      ScanProgress(total: paths.length, completed: 0, phase: ScanPhase.reading),
+      ScanProgress(
+        total: paths.length,
+        completed: processed,
+        phase: toRead.isEmpty ? ScanPhase.done : ScanPhase.reading,
+      ),
     );
 
-    for (var i = 0; i < paths.length; i += batchSize) {
-      final end = (i + batchSize).clamp(0, paths.length);
+    for (var i = 0; i < toRead.length; i += batchSize) {
+      final end = (i + batchSize).clamp(0, toRead.length);
       final batch = paths.sublist(i, end);
       final results = await Isolate.run(() => _readAllMetadata(batch));
 
@@ -293,6 +317,8 @@ class SonoQuery {
       cover: null,
       genre: map['genre'] as String?,
       releaseDate: year != null && year > 0 ? DateTime(year) : null,
+      mtimeMs: map['mtimeMs'] as int?,
+      fileSize: map['size'] as int?,
     );
   }
 
@@ -306,6 +332,29 @@ class SonoQuery {
         return _ScanResult(path: p, error: e);
       }
     }).toList();
+  }
+
+  /// Splits paths into changed (need metadata read) and unchanged
+  /// (fingerprint matches stored one). Runs in background isolate
+  static ({List<String> changed, List<String> unchanged})
+  _partitionByFingerprint(List<String> paths, Map<String, String> known) {
+    final changed = <String>[];
+    final unchanged = <String>[];
+    for (final path in paths) {
+      final expected = known[path];
+      if (expected == null) {
+        changed.add(path);
+        continue;
+      }
+      try {
+        final stat = File(path).statSync();
+        final fp = fingerprint(stat.modified.millisecondsSinceEpoch, stat.size);
+        (fp == expected ? unchanged : changed).add(path);
+      } catch (_) {
+        changed.add(path);
+      }
+    }
+    return (changed: changed, unchanged: unchanged);
   }
 }
 

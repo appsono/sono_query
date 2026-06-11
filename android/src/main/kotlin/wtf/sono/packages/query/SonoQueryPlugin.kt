@@ -26,7 +26,7 @@ class SonoQueryPlugin :
     FlutterPlugin,
     ActivityAware,
     MethodChannel.MethodCallHandler,
-    PluginRegistry.ActivityResultListener {
+ PluginRegistry.ActivityResultListener {
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
 
@@ -196,6 +196,8 @@ class SonoQueryPlugin :
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.YEAR,
                 MediaStore.Audio.Media.TRACK,
+                MediaStore.Audio.Media.DATE_MODIFIED,
+                MediaStore.Audio.Media.SIZE,
             )
 
         val projection =
@@ -230,13 +232,15 @@ class SonoQueryPlugin :
                 val albumIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val durationIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val yearIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+                val trackIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                 val genreIdx = if (hasGenreColumn) cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE) else -1
+                val dateModIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+                val sizeIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
 
                 while (cursor.moveToNext()) {
                     val path = cursor.getString(dataIdx)
                     val artist = fixMojibake(cursor.getString(artistIdx))
                     val album = fixMojibake(cursor.getString(albumIdx))
-                    val trackIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
 
                     songs.add(
                         mapOf(
@@ -249,6 +253,9 @@ class SonoQueryPlugin :
                             "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
                             "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
                             "track" to cursor.getInt(trackIdx).let { if (it == 0) null else it },
+                            // DATE_MODIFIED is seconds since epoch
+                            "mtimeMs" to cursor.getLong(dateModIdx) * 1000L,
+                            "size" to cursor.getLong(sizeIdx),
                         ),
                     )
                 }

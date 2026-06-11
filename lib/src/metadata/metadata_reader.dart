@@ -10,6 +10,7 @@ class MetadataReader {
   static Song readSync(String filePath) {
     try {
       final file = File(filePath);
+      final stat = file.statSync();
       final metadata = readMetadata(file, getImage: false);
 
       return Song(
@@ -26,6 +27,8 @@ class MetadataReader {
             : metadata.year is int
             ? DateTime(metadata.year as int)
             : null,
+        mtimeMs: stat.modified.millisecondsSinceEpoch,
+        fileSize: stat.size,
       );
     } catch (e) {
       return Song.fromPath(filePath);
