@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0
+
+- Adds incremental scanning: `getSongsStream()` accepts `knownFingerprints`
+  (path to `mtimeMs:size` map) and an `onUnchanged` callback. On desktop/iOS,
+  files whose fingerprint matches are skipped entirely instead of having
+  their tags re-read, turning warm rescans into a stat sweep. Stat
+  partitioning runs in a background isolate
+- Adds `mtimeMs` and `fileSize` to `Song`, populated via `statSync` on
+  desktop/iOS and `DATE_MODIFIED`/`SIZE` from MediaStore on Android
+- Adds `SonoQuery.fingerprint()` as the canonical fingerprint format so
+  consumers store and compare the same string the scanner produces
+- Adds `getCoverThumbnail()` for downscaled cover art via MediaStore
+  `loadThumbnail` on Android Q+. Returns null elsewhere so callers can
+  fall back to `getCover()`
+- Fixes a pre-Android-Q crash in `getCoverFromMediaStore`:
+  `loadThumbnail` is API 29+ and throws `NoSuchMethodError` (an `Error`,
+  not caught by the existing `catch`) on older devices. Now gated and
+  returns null, falling through to embedded art
+- Hoists the `TRACK` column index lookup out of the MediaStore cursor loop
+
 ## 0.6.2
 
 - Adds `MetadataReader.writeAsync()` for cross-platform tag editing. On
