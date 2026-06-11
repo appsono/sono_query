@@ -39,6 +39,14 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
   }
 
   @override
+  Future<Uint8List?> getCoverThumbnail(String filePath, int maxDim) {
+    return _channel.invokeMethod<Uint8List>('getCoverThumbnail', {
+      'path': filePath,
+      'maxDim': maxDim,
+    });
+  }
+
+  @override
   Future<void> rescanFile(String filePath) async {
     await _channel.invokeMethod<void>('rescanFile', filePath);
   }

@@ -105,6 +105,17 @@ class SonoQueryPlugin :
                 result.success(getCoverFromMediaStore(filePath))
             }
 
+            "getCoverThumbnail" -> {
+                val args = call.arguments as? Map<*, *>
+                val path = args?.get("path") as? String
+                val maxDim = (args?.get("maxDim") as? Number)?.toInt() ?: 512
+                if (path == null) {
+                    result.error("BAD_ARGS", "path required", null)
+                } else {
+                    result.success(getCoverFromMediaStore(path, maxDim))
+                }
+            }
+
             "rescanFile" -> {
                 val filePath = call.arguments as String
                 MediaScannerConnection.scanFile(
@@ -264,7 +275,10 @@ class SonoQueryPlugin :
         return songs
     }
 
-    private fun getCoverFromMediaStore(filePath: String): ByteArray? {
+    // loadThumbnail is API 29+; NoSuchMethodError is an Error and was NOT
+    // caught by the catch(Exception) below, so this also fixes a pre-Q crash
+    private fun getCoverFromMediaStore(filePath: String, maxDim: Int = 512): ByteArray? {
+       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val projection = arrayOf(MediaStore.Audio.Media._ID)
         val selection = "${MediaStore.Audio.Media.DATA} = ?"
         val selectionArgs = arrayOf(filePath)
@@ -285,7 +299,12 @@ class SonoQueryPlugin :
                             id,
                         )
                     try {
-                        val bitmap = context.contentResolver.loadThumbnail(uri, android.util.Size(512, 512), null)
+                        val bitmap =
+                            context.contentResolver.loadThumbnail(
+                                uri,
+                                android.util.Size(maxDim, maxDim),
+                                null,
+                            )
                         val stream = java.io.ByteArrayOutputStream()
                         bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, stream)
                         return stream.toByteArray()

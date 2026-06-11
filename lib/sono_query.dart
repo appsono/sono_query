@@ -263,6 +263,17 @@ class SonoQuery {
     return MetadataReader.readCover(filePath);
   }
 
+  /// Downscale cover art for thumbnails
+  ///
+  /// Uses MediaStore thumbnails on Android Q+
+  /// Returns null otherwise so callers can fall back to [getCover]
+  static Future<Uint8List?> getCoverThumbnail(
+    String filePath, {
+    int maxDim = 512,
+  }) {
+    return SonoQueryPlatform.instance.getCoverThumbnail(filePath, maxDim);
+  }
+
   /// Update tags on a song file. Returns false if format is non-writeable
   /// (OGG, Opus, AIFF, APE) or write failed. Trigger MediaStore rescan
   /// on Android

@@ -24,6 +24,11 @@ abstract class SonoQueryPlatform extends PlatformInterface {
     throw UnimplementedError();
   }
 
+  /// Downscaled cover from native thumbnail source, or null when
+  /// platform has none. Android Q+ only
+  Future<Uint8List?> getCoverThumbnail(String filePath, int maxDim) async =>
+      null;
+
   /// Returns a list of audio file paths on device
   ///
   /// [additionalPaths] > extra dirs to scan (desktop only)
