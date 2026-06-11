@@ -31,13 +31,13 @@ class SonoQueryPlugin :
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
 
-    //activity reference, set/cleared by ActivityAware callbacks
-    //null whenever flutter is detached from an activity (e.g. during config changes)
+    // activity reference, set/cleared by ActivityAware callbacks
+    // null whenever flutter is detached from an activity (e.g. during config changes)
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
 
-    //pending result for system "allow write?" dialog
-    //only one in flight at a time, second request rejects with already-in-progress
+    // pending result for system "allow write?" dialog
+    // only one in flight at a time, second request rejects with already-in-progress
     private var pendingWriteResult: MethodChannel.Result? = null
     private var pendingCachePath: String? = null
     private var pendingOriginalPath: String? = null
@@ -59,9 +59,9 @@ class SonoQueryPlugin :
     }
 
     // ==== ActivityAware ====
-    //these four callbacks hand us an Activity reference whenever one exists
-    //we register/unregister an ActivityResultListener so we can receive the
-    //result of the system permission dialog launched by commitFromCache
+    // these four callbacks hand us an Activity reference whenever one exists
+    // we register/unregister an ActivityResultListener so we can receive the
+    // result of the system permission dialog launched by commitFromCache
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
         activityBinding = binding
@@ -116,12 +116,12 @@ class SonoQueryPlugin :
 
     // ==== scan / cover / rescan ====
 
-    /// Returns all metadata from MediaStore in one query
-    /// On API 30+: genre is included directly (AudioColumns.GENRE)
-    /// On API < 30: genre is resolved from Genres join tables
-    ///
-    /// [minDurationMs] > skip songs shorter than this, defaults to > 0
-    /// [excludedPaths] > skip songs whose path starts with any of these prefixes
+    // Returns all metadata from MediaStore in one query
+    // On API 30+: genre is included directly (AudioColumns.GENRE)
+    // On API < 30: genre is resolved from Genres join tables
+    // 
+    // [minDurationMs] > skip songs shorter than this, defaults to > 0
+    // [excludedPaths] > skip songs whose path starts with any of these prefixes
     private fun getSongsWithMetadata(
         minDurationMs: Long?,
         excludedPaths: List<String>
@@ -175,14 +175,14 @@ class SonoQueryPlugin :
             baseProjection
         }
 
-        //build WHERE clause: min duration + path exclusions
+        // build WHERE clause: min duration + path exclusions
         val durationThreshold = minDurationMs ?: 0L
         val selectionParts = mutableListOf("${MediaStore.Audio.Media.DURATION} > $durationThreshold")
         val selectionArgs = mutableListOf<String>()
 
         for (path in excludedPaths) {
             selectionParts.add("${MediaStore.Audio.Media.DATA} NOT LIKE ?")
-            //append /% so /storage/emulated/0/Ringtones matches everything inside
+            // append /% so /storage/emulated/0/Ringtones matches everything inside
             selectionArgs.add("${path.trimEnd('/')}/%")
         }
 
@@ -210,10 +210,10 @@ class SonoQueryPlugin :
                 songs.add(mapOf(
                     "path" to path,
                     "title" to fixMojibake(cursor.getString(titleIdx)),
-                    //MediaStore return <unknown> for missing artist/album
+                    // MediaStore return <unknown> for missing artist/album
                     "artist" to if (artist == "<unknown>") null else artist,
                     "album" to if (album == "<unknown>") null else album,
-                    "duration" to cursor.getLong(durationIdx), //ms
+                    "duration" to cursor.getLong(durationIdx), // ms
                     "year" to cursor.getInt(yearIdx).let { if (it == 0) null else it },
                     "genre" to if (genreIdx >= 0) fixMojibake(cursor.getString(genreIdx)) else genreLookup[path],
                     "track" to cursor.getInt(trackIdx).let { if (it == 0) null else it },
@@ -256,7 +256,7 @@ class SonoQueryPlugin :
 
     // ==== write plumbing ====
 
-    //path -> MediaStore content URI string, or null when not indexed
+    // path -> MediaStore content URI string, or null when not indexed
     private fun resolveContentUri(call: MethodCall, result: MethodChannel.Result) {
         val path = call.argument<String>("path")
         if (path == null) {
@@ -293,11 +293,11 @@ class SonoQueryPlugin :
         return null
     }
 
-    //copies original files bytes into app-private cache dir
-    //returns cache files absolute path. caller is responsible for
-    //deleting cache file when done. prefers direct File read when
-    //file is in apps own scope, otherwise goes via ContentResolver
-    //(which works without permission for read)
+    // copies original files bytes into app-private cache dir
+    // returns cache files absolute path. caller is responsible for
+    // deleting cache file when done. prefers direct File read when
+    // file is in apps own scope, otherwise goes via ContentResolver
+    // (which works without permission for read)
     private fun copyToAppCache(call: MethodCall, result: MethodChannel.Result) {
         val path = call.argument<String>("path")
         if (path == null) {
@@ -338,17 +338,17 @@ class SonoQueryPlugin :
             }
             result.success(cacheFile.absolutePath)
         } catch (e: Exception) {
-            //clean up partial cache on failure
+            // clean up partial cache on failure
             cacheFile.delete()
             result.error("COPY_FAILED", e.message, null)
         }
     }
 
-    //writes the cache files bytes back to original path
-    //tries direct File write first (works for files in apps own scope);
-    //on Android 11+ falls back to MediaStore.createWriteRequest which shows
-    //a system "allow Sono to modify this audio file?" dialog
-    //on success also notifies MediaScanner so other apps see new tags
+    // writes the cache files bytes back to original path
+    // tries direct File write first (works for files in apps own scope);
+    // on Android 11+ falls back to MediaStore.createWriteRequest which shows
+    // a system "allow Sono to modify this audio file?" dialog
+    // on success also notifies MediaScanner so other apps see new tags
     private fun commitFromCache(call: MethodCall, result: MethodChannel.Result) {
         val cachePath = call.argument<String>("cachePath")
         val originalPath = call.argument<String>("originalPath")
@@ -357,7 +357,7 @@ class SonoQueryPlugin :
             return
         }
 
-        //try direct write first, falls through to ContentResolver+dialog on PermissionDenied
+        // try direct write first, falls through to ContentResolver+dialog on PermissionDenied
         val directFile = File(originalPath)
         if (directFile.canWrite()) {
             try {
@@ -370,14 +370,14 @@ class SonoQueryPlugin :
                 result.success(true)
                 return
             } catch (_: SecurityException) {
-                //fall through to MediaStore path
+                // fall through to MediaStore path
             } catch (e: Exception) {
                 result.error("WRITE_FAILED", e.message, null)
                 return
             }
         }
 
-        //MediaStore path
+        // MediaStore path
         val uri = mediaStoreUriFor(originalPath)
         if (uri == null) {
             result.error("NOT_FOUND", "not in MediaStore: $originalPath", null)
@@ -387,7 +387,7 @@ class SonoQueryPlugin :
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             requestAndWriteApi30(uri, cachePath, originalPath, result)
         } else {
-            //pre-Android 11: try direct ContentResolver write, no per-file dialog
+            // pre-Android 11: try direct ContentResolver write, no per-file dialog
             tryDirectContentResolverWrite(uri, cachePath, originalPath, result)
         }
     }
@@ -409,11 +409,11 @@ class SonoQueryPlugin :
             return
         }
 
-        //pending intent that, when launched, shows system dialog
+        // pending intent that, when launched, shows system dialog
         val pendingIntent: PendingIntent =
             MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
 
-        //store state so onActivityResult can complete operation later
+        // store state so onActivityResult can complete operation later
         pendingWriteResult = result
         pendingCachePath = cachePath
         pendingOriginalPath = originalPath
@@ -448,15 +448,15 @@ class SonoQueryPlugin :
         pendingUri = null
 
         if (result == null || cachePath == null || originalPath == null || uri == null) {
-            return true //consumed the result even if state was wrong
+            return true // consumed the result even if state was wrong
         }
 
         if (resultCode != Activity.RESULT_OK) {
-            result.success(false) //user denied
+            result.success(false) // user denied
             return true
         }
 
-        //user granted: stream cache file back into original via ContentResolver
+        // user granted: stream cache file back into original via ContentResolver
         try {
             context.contentResolver.openOutputStream(uri, "wt").use { output ->
                 if (output == null) {
@@ -482,8 +482,8 @@ class SonoQueryPlugin :
         result: MethodChannel.Result
     ) {
         try {
-            //on API 29 needs requestLegacyExternalStorage=true in app manifest
-            //on API 28 and below works with WRITE_EXTERNAL_STORAGE granted
+            // on API 29 needs requestLegacyExternalStorage=true in app manifest
+            // on API 28 and below works with WRITE_EXTERNAL_STORAGE granted
             context.contentResolver.openOutputStream(uri, "wt").use { output ->
                 if (output == null) {
                     result.error("OPEN_FAILED", "could not open output stream", null)
@@ -504,23 +504,23 @@ class SonoQueryPlugin :
         try {
             MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
         } catch (_: Exception) {
-            //best-effort, do not fail whole operation
+            // best-effort, do not fail whole operation
         }
     }
 }
 
-/// Fixes UTF-8 mojibake: some ID3 taggers store UTF-8 bytes but declare
-/// Latin-1/CP1252. MediaStore reads the declared encoding, producing garbled
-/// text (e.g. "Donâ€™t" instead of "Don't").
-/// Re-encodes as Windows-1252 bytes then decodes as UTF-8.
+// Fixes UTF-8 mojibake: some ID3 taggers store UTF-8 bytes but declare
+// Latin-1/CP1252. MediaStore reads the declared encoding, producing garbled
+// text (e.g. "Donâ€™t" instead of "Don't").
+// Re-encodes as Windows-1252 bytes then decodes as UTF-8.
 private fun fixMojibake(input: String?): String? {
     if (input == null) return null
     return try {
         val cp1252 = charset("windows-1252")
         val bytes = input.toByteArray(cp1252)
         val decoded = String(bytes, Charsets.UTF_8)
-        //mojibake always expands: multi-byte UTF-8 sequences become multiple
-        //single-byte CP1252 chars, so a valid fix will always be shorter
+        // mojibake always expands: multi-byte UTF-8 sequences become multiple
+        // single-byte CP1252 chars, so a valid fix will always be shorter
         if (!decoded.contains('\uFFFD') && decoded.length < input.length) decoded else input
     } catch (_: Exception) {
         input
