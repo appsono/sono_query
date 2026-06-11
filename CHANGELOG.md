@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- readCover ran its synchronous tag parse on the calling isolate,
+  blocking the UI during list scrolls; the parse now runs via Isolate.run
+
 ## 0.7.0
 
 - Adds incremental scanning: `getSongsStream()` accepts `knownFingerprints`

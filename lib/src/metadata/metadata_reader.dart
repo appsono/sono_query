@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
@@ -52,11 +53,9 @@ class MetadataReader {
     }
   }
 
-  static Future<Uint8List?> readCover(String filePath) async {
+  static Future<Uint8List?> readEmbeddedCover(String filePath) async {
     try {
-      final file = File(filePath);
-      final metadata = readMetadata(file, getImage: true);
-
+      final metadata = readMetadata(File(filePath), getImage: true);
       if (metadata.pictures.isNotEmpty) {
         final bytes = Uint8List.fromList(metadata.pictures.first.bytes);
         if (bytes.length >= 4) {
@@ -73,7 +72,16 @@ class MetadataReader {
         }
       }
 
-      //fallback to MediaStore on Android
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Uint8List?> readCover(String filePath) async {
+    final embedded = await Isolate.run(() => readEmbeddedCover(filePath));
+    if (embedded != null) return embedded;
+    try {
       return await SonoQueryPlatform.instance.getCoverFromMediaStore(filePath);
     } catch (_) {
       return null;
