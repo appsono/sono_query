@@ -265,8 +265,10 @@ class SonoQuery {
 
   /// Downscale cover art for thumbnails
   ///
-  /// Uses MediaStore thumbnails on Android Q+
-  /// Returns null otherwise so callers can fall back to [getCover]
+  /// On Android tries MediaStore thumbnails first (Q+), then a
+  /// subsampled native decode of embedded tag picture (all API
+  /// levels, including files MediaStore does not index)
+  /// Returns null on other platforms so callers can fall back to [getCover]
   static Future<Uint8List?> getCoverThumbnail(
     String filePath, {
     int maxDim = 512,

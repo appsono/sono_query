@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0
+
+- All heavy Android plugin work (MediaStore scans, cover decode/encode,
+  tag-edit file copies) now runs on a small background thread pool
+  instead of the platform main thread, removing per-cover and per-scan
+  UI stalls. Results are delivered back on the main thread
+- `getCoverThumbnail()` falls back to a subsampled native decode of the
+  embedded tag picture when MediaStore has no thumbnail (pre-Q devices
+  and files MediaStore does not index). Two-pass decode with
+  `inSampleSize` bounds peak bitmap memory to ~4MB regardless of
+  source art resolution; bitmaps are explicitly recycled
+- Thumbnail-sized embedded pictures under 300KB are returned as-is
+  with zero decode cost
+
 ## 0.7.1
 
 - readCover ran its synchronous tag parse on the calling isolate,

@@ -6,9 +6,14 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -17,10 +22,13 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class SonoQueryPlugin :
     FlutterPlugin,
@@ -29,6 +37,11 @@ class SonoQueryPlugin :
     PluginRegistry.ActivityResultListener {
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
+
+    // background pool for scans / cover decode / file copies
+    // created in onAttachedToEngine, torn down in onDetachedFromEngine
+    private var executor: ExecutorService? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // activity reference, set/cleared by ActivityAware callbacks
     // null whenever flutter is detached from an activity (e.g. during config changes)
@@ -51,10 +64,35 @@ class SonoQueryPlugin :
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "sono_query")
         channel.setMethodCallHandler(this)
+        executor = Executors.newFixedThreadPool(2)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        executor?.shutdown()
+        executor = null
+    }
+
+    // MethodChannel results must be delivered on platform main thread.
+    // Heavy work (MediaStore scans, bitmap decode/encode, file copies) runs
+    // on [executor]; only result delivery hops back to main
+    private fun runInBackground(
+        result: MethodChannel.Result,
+        task: () -> Any?,
+    ) {
+        val exec = executor
+        if (exec == null) {
+            result.error("DETACHED", "plugin detached from engine", null)
+            return
+        }
+        exec.execute {
+            try {
+                val value = task()
+                mainHandler.post { result.success(value) }
+            } catch (e: Exception) {
+                mainHandler.post { result.error("NATIVE_ERROR", e.message, null) }
+            }
+        }
     }
 
     // ==== ActivityAware ====
@@ -97,12 +135,12 @@ class SonoQueryPlugin :
                 val excludedPaths =
                     (args?.get("excludedPaths") as? List<*>)
                         ?.filterIsInstance<String>() ?: emptyList()
-                result.success(getSongsWithMetadata(minDurationMs, excludedPaths))
+                runInBackground(result) { getSongsWithMetadata(minDurationMs, excludedPaths) }
             }
 
             "getCoverFromMediaStore" -> {
                 val filePath = call.arguments as String
-                result.success(getCoverFromMediaStore(filePath))
+                runInBackground(result) { getCoverFromMediaStore(filePath) }
             }
 
             "getCoverThumbnail" -> {
@@ -112,7 +150,10 @@ class SonoQueryPlugin :
                 if (path == null) {
                     result.error("BAD_ARGS", "path required", null)
                 } else {
-                    result.success(getCoverFromMediaStore(path, maxDim))
+                    runInBackground(result) {
+                        getCoverFromMediaStore(path, maxDim)
+                            ?: getEmbeddedThumbnail(path, maxDim)
+                    }
                 }
             }
 
@@ -128,7 +169,12 @@ class SonoQueryPlugin :
             }
 
             "resolveContentUri" -> {
-                resolveContentUri(call, result)
+                val path = call.argument<String>("path")
+                if (path == null) {
+                    result.error("BAD_ARGS", "path required", null)
+                } else {
+                    runInBackground(result) { mediaStoreUriFor(path)?.toString() }
+                }
             }
 
             "copyToAppCache" -> {
@@ -308,9 +354,14 @@ class SonoQueryPlugin :
                                 android.util.Size(maxDim, maxDim),
                                 null,
                             )
-                        val stream = java.io.ByteArrayOutputStream()
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, stream)
-                        return stream.toByteArray()
+                        return try {
+                            val stream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                            stream.toByteArray()
+                        } finally {
+                            // explicit recycle helps GC pressure on older devices
+                            bitmap.recycle()
+                        }
                     } catch (e: Exception) {
                         return null
                     }
@@ -319,10 +370,64 @@ class SonoQueryPlugin :
         return null
     }
 
+    private val passThroughBytes = 300 * 1024
+
+    private fun getEmbeddedThumbnail(
+        path: String,
+        maxDim: Int,
+    ): ByteArray? {
+        val mmr = MediaMetadataRetriever()
+        return try {
+            mmr.setDataSource(path)
+            val pic = mmr.embeddedPicture ?: return null
+            decodeSubsampled(pic, maxDim)
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                mmr.release()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun decodeSubsampled(
+        bytes: ByteArray,
+        maxDim: Int,
+    ): ByteArray? {
+        // pass 1: bounds only, no pixel allocation
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val w = bounds.outWidth
+        val h = bounds.outHeight
+        if (w <= 0 || h <= 0) return null
+
+        if (w <= maxDim && h <= maxDim && bytes.size <= passThroughBytes) {
+            return bytes
+        }
+
+        // pass 2: largest power-of-two subsample that keeps result >= maxDim
+        var sample = 1
+        while (w / (sample * 2) >= maxDim || h / (sample * 2) >= maxDim) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val bitmap =
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+        return try {
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            out.toByteArray()
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     // ==== write plumbing ====
 
-    // path -> MediaStore content URI string, or null when not indexed
-    private fun resolveContentUri(
+    // copies original files bytes into app-private cache dir
+    // returns cache files absolute path
+    private fun copyToAppCache(
         call: MethodCall,
         result: MethodChannel.Result,
     ) {
@@ -331,8 +436,55 @@ class SonoQueryPlugin :
             result.error("BAD_ARGS", "path required", null)
             return
         }
-        val uri = mediaStoreUriFor(path)
-        result.success(uri?.toString())
+        val exec = executor
+        if (exec == null) {
+            result.error("DETACHED", "plugin detached from engine", null)
+            return
+        }
+
+        val basename = File(path).name
+        val cacheFile = File(context.cacheDir, "edit_${UUID.randomUUID()}_$basename")
+
+        exec.execute {
+            try {
+                val directFile = File(path)
+                if (directFile.canRead()) {
+                    FileInputStream(directFile).use { input ->
+                        FileOutputStream(cacheFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                } else {
+                    val uri = mediaStoreUriFor(path)
+                    if (uri == null) {
+                        mainHandler.post {
+                            result.error(
+                                "NOT_FOUND",
+                                "file not readable and not in MediaStore: $path",
+                                null,
+                            )
+                        }
+                        return@execute
+                    }
+                    context.contentResolver.openInputStream(uri).use { input ->
+                        if (input == null) {
+                            mainHandler.post {
+                                result.error("OPEN_FAILED", "could not open input stream", null)
+                            }
+                            return@execute
+                        }
+                        FileOutputStream(cacheFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+                mainHandler.post { result.success(cacheFile.absolutePath) }
+            } catch (e: Exception) {
+                // clean up partial cache on failure
+                cacheFile.delete()
+                mainHandler.post { result.error("COPY_FAILED", e.message, null) }
+            }
+        }
     }
 
     private fun mediaStoreUriFor(path: String): Uri? {
@@ -363,60 +515,6 @@ class SonoQueryPlugin :
         return null
     }
 
-    // copies original files bytes into app-private cache dir
-    // returns cache files absolute path. caller is responsible for
-    // deleting cache file when done. prefers direct File read when
-    // file is in apps own scope, otherwise goes via ContentResolver
-    // (which works without permission for read)
-    private fun copyToAppCache(
-        call: MethodCall,
-        result: MethodChannel.Result,
-    ) {
-        val path = call.argument<String>("path")
-        if (path == null) {
-            result.error("BAD_ARGS", "path required", null)
-            return
-        }
-
-        val basename = File(path).name
-        val cacheFile = File(context.cacheDir, "edit_${UUID.randomUUID()}_$basename")
-
-        try {
-            val directFile = File(path)
-            if (directFile.canRead()) {
-                FileInputStream(directFile).use { input ->
-                    FileOutputStream(cacheFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } else {
-                val uri = mediaStoreUriFor(path)
-                if (uri == null) {
-                    result.error(
-                        "NOT_FOUND",
-                        "file not readable and not in MediaStore: $path",
-                        null,
-                    )
-                    return
-                }
-                context.contentResolver.openInputStream(uri).use { input ->
-                    if (input == null) {
-                        result.error("OPEN_FAILED", "could not open input stream", null)
-                        return
-                    }
-                    FileOutputStream(cacheFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            }
-            result.success(cacheFile.absolutePath)
-        } catch (e: Exception) {
-            // clean up partial cache on failure
-            cacheFile.delete()
-            result.error("COPY_FAILED", e.message, null)
-        }
-    }
-
     // writes the cache files bytes back to original path
     // tries direct File write first (works for files in apps own scope);
     // on Android 11+ falls back to MediaStore.createWriteRequest which shows
@@ -432,39 +530,51 @@ class SonoQueryPlugin :
             result.error("BAD_ARGS", "cachePath and originalPath required", null)
             return
         }
-
-        // try direct write first, falls through to ContentResolver+dialog on PermissionDenied
-        val directFile = File(originalPath)
-        if (directFile.canWrite()) {
-            try {
-                FileInputStream(File(cachePath)).use { input ->
-                    FileOutputStream(directFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                scanFile(originalPath)
-                result.success(true)
-                return
-            } catch (_: SecurityException) {
-                // fall through to MediaStore path
-            } catch (e: Exception) {
-                result.error("WRITE_FAILED", e.message, null)
-                return
-            }
-        }
-
-        // MediaStore path
-        val uri = mediaStoreUriFor(originalPath)
-        if (uri == null) {
-            result.error("NOT_FOUND", "not in MediaStore: $originalPath", null)
+        val exec = executor
+        if (exec == null) {
+            result.error("DETACHED", "plugin detached from engine", null)
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            requestAndWriteApi30(uri, cachePath, originalPath, result)
-        } else {
-            // pre-Android 11: try direct ContentResolver write, no per-file dialog
-            tryDirectContentResolverWrite(uri, cachePath, originalPath, result)
+        // file IO + MediaStore lookup off the main thread; only the
+        // system permission dialog (API 30+) hops back to main
+        exec.execute {
+            // try direct write first, falls through to ContentResolver+dialog on PermissionDenied
+            val directFile = File(originalPath)
+            if (directFile.canWrite()) {
+                try {
+                    FileInputStream(File(cachePath)).use { input ->
+                        FileOutputStream(directFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    scanFile(originalPath)
+                    mainHandler.post { result.success(true) }
+                    return@execute
+                } catch (_: SecurityException) {
+                    // fall through to MediaStore path
+                } catch (e: Exception) {
+                    mainHandler.post { result.error("WRITE_FAILED", e.message, null) }
+                    return@execute
+                }
+            }
+
+            // MediaStore path
+            val uri = mediaStoreUriFor(originalPath)
+            if (uri == null) {
+                mainHandler.post {
+                    result.error("NOT_FOUND", "not in MediaStore: $originalPath", null)
+                }
+                return@execute
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // dialog launch needs the main thread + activity
+                mainHandler.post { requestAndWriteApi30(uri, cachePath, originalPath, result) }
+            } else {
+                // pre-Android 11: try direct ContentResolver write, no per-file dialog
+                tryDirectContentResolverWrite(uri, cachePath, originalPath, result)
+            }
         }
     }
 
@@ -540,24 +650,35 @@ class SonoQueryPlugin :
         }
 
         // user granted: stream cache file back into original via ContentResolver
-        try {
-            context.contentResolver.openOutputStream(uri, "wt").use { output ->
-                if (output == null) {
-                    result.error("OPEN_FAILED", "could not open output stream", null)
-                    return true
+        // (off the main thread; onActivityResult itself returns immediately)
+        val exec = executor
+        if (exec == null) {
+            result.error("DETACHED", "plugin detached from engine", null)
+            return true
+        }
+        exec.execute {
+            try {
+                context.contentResolver.openOutputStream(uri, "wt").use { output ->
+                    if (output == null) {
+                        mainHandler.post {
+                            result.error("OPEN_FAILED", "could not open output stream", null)
+                        }
+                        return@execute
+                    }
+                    FileInputStream(File(cachePath)).use { input ->
+                        input.copyTo(output)
+                    }
                 }
-                FileInputStream(File(cachePath)).use { input ->
-                    input.copyTo(output)
-                }
+                scanFile(originalPath)
+                mainHandler.post { result.success(true) }
+            } catch (e: Exception) {
+                mainHandler.post { result.error("WRITE_FAILED", e.message, null) }
             }
-            scanFile(originalPath)
-            result.success(true)
-        } catch (e: Exception) {
-            result.error("WRITE_FAILED", e.message, null)
         }
         return true
     }
 
+    // runs on background pool; results hop back to main
     private fun tryDirectContentResolverWrite(
         uri: Uri,
         cachePath: String,
@@ -569,7 +690,9 @@ class SonoQueryPlugin :
             // on API 28 and below works with WRITE_EXTERNAL_STORAGE granted
             context.contentResolver.openOutputStream(uri, "wt").use { output ->
                 if (output == null) {
-                    result.error("OPEN_FAILED", "could not open output stream", null)
+                    mainHandler.post {
+                        result.error("OPEN_FAILED", "could not open output stream", null)
+                    }
                     return
                 }
                 FileInputStream(File(cachePath)).use { input ->
@@ -577,9 +700,9 @@ class SonoQueryPlugin :
                 }
             }
             scanFile(originalPath)
-            result.success(true)
+            mainHandler.post { result.success(true) }
         } catch (e: Exception) {
-            result.error("WRITE_FAILED", e.message, null)
+            mainHandler.post { result.error("WRITE_FAILED", e.message, null) }
         }
     }
 
