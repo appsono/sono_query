@@ -19,14 +19,18 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
     Duration? minDuration,
     List<String> excludedPaths = const [],
   }) async {
-    final result = await _channel.invokeListMethod<Map>(
-      'getSongsWithMetadata',
-      <String, dynamic>{
-        'minDurationMs': minDuration?.inMilliseconds,
-        'excludedPaths': excludedPaths,
-      },
-    );
-    return result?.map((m) => Map<String, dynamic>.from(m)).toList();
+    try {
+      final result = await _channel.invokeListMethod<Map>(
+        'getSongsWithMetadata',
+        <String, dynamic>{
+          'minDurationMs': minDuration?.inMilliseconds,
+          'excludedPaths': excludedPaths,
+        },
+      );
+      return result?.map((m) => Map<String, dynamic>.from(m)).toList();
+    } on MissingPluginException {
+      return null;
+    }
   }
 
   @override

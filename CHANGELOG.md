@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1
+
+- Fix crash on Linux/Windows startup scan: MissingPluginException
+  now returns null instead of propagating
+
 ## 0.8.0
 
 - All heavy Android plugin work (MediaStore scans, cover decode/encode,
