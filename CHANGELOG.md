@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2
+
+- Restore flutter constraint dropped in db85454; without it
+  SonoQueryDesktop never registered on Linux/Windows (desktop
+  dart-plugin self-impl requires flutter >=2.11.0)
+
 ## 0.8.1
 
 - Fix crash on Linux/Windows startup scan: MissingPluginException
