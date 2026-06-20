@@ -8,9 +8,7 @@ Future<List<String>> scanDirectories(
   void Function(String path)? onDiscover,
 }) async {
   final results = <String>[];
-  final normalized = excludedPaths
-      .map((e) => e.endsWith('/') ? e : '$e/')
-      .toList();
+  final excluded = excludedPaths.where((e) => e.isNotEmpty).toList();
 
   for (final root in paths) {
     final dir = Directory(root);
@@ -22,8 +20,7 @@ Future<List<String>> scanDirectories(
         continue;
       }
 
-      //check exclusions
-      if (normalized.any((ex) => entity.path.startsWith(ex))) continue;
+      if (excluded.any((ex) => p.isWithin(ex, entity.path))) continue;
 
       onDiscover?.call(entity.path);
       results.add(entity.path);
