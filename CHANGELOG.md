@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3
+
+- Fix folder exclusion on Windows: matched against normalized
+  `/`-suffixed prefixes, so backslash paths never matched and
+  excluded folders were still scanned. Now uses `p.isWithin`, which
+  is separator-aware and also stops sibling folders sharing a name
+  prefix from being wrongly excluded
+
 ## 0.8.2
 
 - Restore flutter constraint dropped in db85454; without it

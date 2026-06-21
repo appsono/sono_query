@@ -10,7 +10,9 @@ void main() {
     setUp(() async {
       root = await Directory.systemTemp.createTemp('sono_scan_test');
       await File(p.join(root.path, 'keep', 'a.mp3')).create(recursive: true);
-      await File(p.join(root.path, 'excluded', 'b.mp3')).create(recursive: true);
+      await File(
+        p.join(root.path, 'excluded', 'b.mp3'),
+      ).create(recursive: true);
       await File(
         p.join(root.path, 'excluded', 'nested', 'c.mp3'),
       ).create(recursive: true);
@@ -23,11 +25,12 @@ void main() {
       if (await root.exists()) await root.delete(recursive: true);
     });
 
-    Future<Set<String>> scanNames({List<String> excludedPaths = const []}) async {
-      final results = await scanDirectories(
-        [root.path],
-        excludedPaths: excludedPaths,
-      );
+    Future<Set<String>> scanNames({
+      List<String> excludedPaths = const [],
+    }) async {
+      final results = await scanDirectories([
+        root.path,
+      ], excludedPaths: excludedPaths);
       return results.map(p.basename).toSet();
     }
 
@@ -36,10 +39,10 @@ void main() {
     });
 
     test('excludes files in an excluded folder and its subfolders', () async {
-      expect(
-        await scanNames(excludedPaths: [p.join(root.path, 'excluded')]),
-        {'a.mp3', 'd.mp3'},
-      );
+      expect(await scanNames(excludedPaths: [p.join(root.path, 'excluded')]), {
+        'a.mp3',
+        'd.mp3',
+      });
     });
 
     test('does not exclude sibling folders sharing a name prefix', () async {
