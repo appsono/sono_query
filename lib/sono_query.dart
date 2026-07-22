@@ -305,6 +305,15 @@ class SonoQuery {
     return ok;
   }
 
+  /// Maps MediaStore _ID to file path, for migrating old Sono data
+  static Future<Map<int, String>> resolveMediaStoreIds(List<int> ids) =>
+      SonoQueryPlatform.instance.resolveMediaStoreIds(ids);
+
+  /// Maps MediaStore ALBUM_ID to one member song path
+  static Future<Map<int, String>> resolveMediaStoreAlbumIds(
+    List<int> albumIds,
+  ) => SonoQueryPlatform.instance.resolveMediaStoreAlbumIds(albumIds);
+
   /// Convert platform metadata map to Song, optionally parsing artists
   static Song _songFromMap(
     Map<String, dynamic> map, [

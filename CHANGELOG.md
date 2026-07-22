@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.4
+
+### Added
+
+- `resolveMediaStoreIds` and `resolveMediaStoreAlbumIds` for turning legacy
+  MediaStore ids into file paths
+
 ## 0.8.3
 
 - Fix folder exclusion on Windows: matched against normalized

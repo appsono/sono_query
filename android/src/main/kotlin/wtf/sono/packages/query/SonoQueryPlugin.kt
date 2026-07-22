@@ -177,6 +177,27 @@ class SonoQueryPlugin :
                 }
             }
 
+            "resolveMediaStoreIds" -> {
+                val ids = call.argument<List<*>>("ids")
+                    ?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList()
+                runInBackground(result) {
+                    resolveByColumn(MediaStore.Audio.Media_ID, ids, null)
+                }
+            }
+
+            "resolveMediaStoreAlbumIds" -> {
+                val ids = call.argument<List<*>>("albumIds")
+                    ?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList()
+                runInBackground(result) {
+                    // song order makes representative stable across runs
+                    resolveByColumn(
+                        MediaStore.Audio.Media.ALBUM_ID,
+                        ids,
+                        "${MediaStore.Audio.Media.TRACK} ASC"
+                    )
+                }
+            }
+
             "copyToAppCache" -> {
                 copyToAppCache(call, result)
             }
@@ -421,6 +442,51 @@ class SonoQueryPlugin :
         } finally {
             bitmap.recycle()
         }
+    }
+
+    // ==== legacy id resolution ====
+
+    private val idChunkSize = 900
+
+    // Maps values of [keyColumn] to a file path, for ids old Sono
+    // stored before it knew about paths
+    //
+    // First row per key wins, so [sortOrder] decides which song
+    // represents an album. Unresolvable ids are simply absent
+    private fun resolveByColumn(
+        keyColumn: String,
+        ids: List<Long>,
+        sortOrder: String?,
+    ): Map<Long, String> {
+        if (ids.isEmpty()) return emptyMap()
+
+        val out = HashMap<Long, String>(ids.size)
+        val projection = arrayOf(keyColumn, MediaStore.Audio.Media.DATA)
+
+        for (chunk in ids.distinct().chunked(idChunkSize)) {
+            val selection = "$keyColumn IN (${chunk.joinToString(",") { "?" }})"
+            val args = chunk.map { it.toString() }.toTypedArray()
+
+            context.contentResolver
+                .query(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    selection,
+                    args,
+                    sortOrder,
+                )?.use { cursor ->
+                    val keyIdx = cursor.getColumnIndexOrThrow(keyColumn)
+                    val dataIdx =
+                        cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                    while (cursor.moveToNext()) {
+                        val key = cursor.getLong(keyIdx)
+                        if (out.containsKey(key)) continue
+                        val path = cursor.getString(dataIdx) ?: continue
+                        out[key] = path
+                    }
+                }
+        }
+        return out
     }
 
     // ==== write plumbing ====

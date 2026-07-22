@@ -59,6 +59,34 @@ class SonoQueryMethodChannel extends SonoQueryPlatform {
   }
 
   @override
+  Future<Map<int, String>> resolveMediaStoreIds(List<int> ids) =>
+      _resolveIds('resolveMediaStoreIds', 'ids', ids);
+
+  @override
+  Future<Map<int, String>> resolveMediaStoreAlbumIds(List<int> albumsIds) =>
+      _resolveIds('resolveMediaStoreAlbumIds', 'albumsIds', albumsIds);
+
+  /// Converts Object keys safely instead of relying on casts
+  Future<Map<int, String>> _resolveIds(
+    String method,
+    String argName,
+    List<int> ids,
+  ) async {
+    if (ids.isEmpty) return {};
+    try {
+      final raw = await _channel.invokeMethod<Map>(method, {argName: ids});
+      if (raw == null) return {};
+      final out = <int, String>{};
+      raw.forEach((k, v) {
+        if (k is int && v is String) out[k] = v;
+      });
+      return out;
+    } on MissingPluginException {
+      return {};
+    }
+  }
+
+  @override
   Future<String> copyToAppCache(String path) async {
     final result = await _channel.invokeMethod<String>('copyToAppCache', {
       'path': path,

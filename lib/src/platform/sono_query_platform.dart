@@ -85,4 +85,21 @@ abstract class SonoQueryPlatform extends PlatformInterface {
   Future<bool> commitFromCache(String cachePath, String originalPath) async {
     throw UnsupportedError('commitFromCache is Android-only');
   }
+
+  /// Maps MediaStore _ID to a file path
+  ///
+  /// Old Sono stored song references as MediaStore ids, so migrating
+  /// data needs this pass first. Ids that are no longer indexed are
+  /// absent from result rather than mapped to null
+  ///
+  /// Android only, returns an empty map elsewhere
+  Future<Map<int, String>> resolveMediaStoreIds(List<int> ids) async => {};
+
+  /// Maps MediaStore ALBUM_ID to path of one member song
+  ///
+  /// Picks lowest track number, so repeated calls agree with each other
+  /// Android only, return an empty map elsewhere
+  Future<Map<int, String>> resolveMediaStoreAlbumIds(
+    List<int> albumIds,
+  ) async => {};
 }
