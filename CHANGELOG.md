@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5
+
+### Fixed
+
+- `resolveMediaStoreIds` failed to compile
+
 ## 0.8.4
 
 ### Added

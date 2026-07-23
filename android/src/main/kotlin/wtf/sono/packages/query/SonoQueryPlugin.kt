@@ -181,7 +181,7 @@ class SonoQueryPlugin :
                 val ids = call.argument<List<*>>("ids")
                     ?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList()
                 runInBackground(result) {
-                    resolveByColumn(MediaStore.Audio.Media_ID, ids, null)
+                    resolveByColumn(MediaStore.Audio.Media._ID, ids, null)
                 }
             }
 
