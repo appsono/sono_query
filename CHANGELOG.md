@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.7
+
+### Fixed
+
+- Android scan stalled up front: year fallback is now batched and skips
+  unchanged files
+- `.opus` typo in the fallback extension set
+
 ## 0.8.6
 
 ### Fixed
