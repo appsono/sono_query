@@ -53,6 +53,16 @@ class MetadataReader {
     }
   }
 
+  /// Release date only. MediaStore reports YEAR 0 for Vorbis-comment files
+  static DateTime? readReleaseDateSync(String filePath) {
+    try {
+      final date = readMetadata(File(filePath), getImage: false).year;
+      return (date != null && date.year > 1) ? date : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<Uint8List?> readEmbeddedCover(String filePath) async {
     try {
       final metadata = readMetadata(File(filePath), getImage: true);

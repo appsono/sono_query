@@ -161,8 +161,19 @@ class SonoQuery {
     );
 
     if (platformSongs != null) {
+      //MediaStore has no year for Vorbis-comment files, read tag instead
+      final needYear = <String>[
+        for (final m in platformSongs)
+          if (m['year'] == null && _needsYearFallback(m['path'] as String))
+            m['path'] as String,
+      ];
+      final fallbackYears = needYear.isEmpty
+          ? const <String, DateTime>{}
+          : await Isolate.run(() => _readReleaseDates(needYear));
       for (var i = 0; i < platformSongs.length; i++) {
-        yield _songFromMap(platformSongs[i], config.artistParser);
+        final song = _songFromMap(platformSongs[i], config.artistParser);
+        final fallback = fallbackYears[song.path];
+        yield fallback == null ? song : song.copyWith(releaseDate: fallback);
         if (onProgress != null &&
             (i % 100 == 0 || i == platformSongs.length - 1)) {
           onProgress(
@@ -354,6 +365,25 @@ class SonoQuery {
         return _ScanResult(path: p, error: e);
       }
     }).toList();
+  }
+
+  /// Formats MediaStore does not index a year for
+  static const _yearFallbackExtensions = {'.flac', '.ogg', '.oppus', '.ape'};
+
+  static bool _needsYearFallback(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) return false;
+    return _yearFallbackExtensions.contains(path.substring(dot).toLowerCase());
+  }
+
+  /// Runs synchronously inside background isolate
+  static Map<String, DateTime> _readReleaseDates(List<String> paths) {
+    final out = <String, DateTime>{};
+    for (final path in paths) {
+      final date = MetadataReader.readReleaseDateSync(path);
+      if (date != null) out[path] = date;
+    }
+    return out;
   }
 
   /// Splits paths into changed (need metadata read) and unchanged
