@@ -161,30 +161,29 @@ class SonoQuery {
     );
 
     if (platformSongs != null) {
-      //MediaStore has no year for Vorbis-comment files, read tag instead
-      final needYear = <String>[
-        for (final m in platformSongs)
-          if (m['year'] == null && _needsYearFallback(m['path'] as String))
-            m['path'] as String,
-      ];
-      final fallbackYears = needYear.isEmpty
-          ? const <String, DateTime>{}
-          : await Isolate.run(() => _readReleaseDates(needYear));
-      for (var i = 0; i < platformSongs.length; i++) {
-        final song = _songFromMap(platformSongs[i], config.artistParser);
-        final fallback = fallbackYears[song.path];
-        yield fallback == null ? song : song.copyWith(releaseDate: fallback);
-        if (onProgress != null &&
-            (i % 100 == 0 || i == platformSongs.length - 1)) {
-          onProgress(
-            ScanProgress(
-              total: platformSongs.length,
-              completed: i + 1,
-              phase: i == platformSongs.length - 1
-                  ? ScanPhase.done
-                  : ScanPhase.reading,
-            ),
-          );
+      for (var i = 0; i < platformSongs.length; i += batchSize) {
+        final end = (i + batchSize).clamp(0, platformSongs.length);
+        final slice = platformSongs.sublist(i, end);
+        final years = await _mediaStoreYearFallback(slice, knownFingerprints);
+
+        for (var n = 0; n < slice.length; n++) {
+          final song = _songFromMap(slice[n], config.artistParser);
+          final year = years[song.path];
+          yield year == null ? song : song.copyWith(releaseDate: year);
+
+          final done = i + n + 1;
+          if (onProgress != null &&
+              (done % 100 == 0 || done == platformSongs.length - 1)) {
+            onProgress(
+              ScanProgress(
+                total: platformSongs.length,
+                completed: done,
+                phase: done == platformSongs.length
+                    ? ScanPhase.done
+                    : ScanPhase.reading,
+              ),
+            );
+          }
         }
       }
       return;
@@ -367,8 +366,36 @@ class SonoQuery {
     }).toList();
   }
 
+  /// Year fallback for Vorbis-comment files, skipping unchanged ones
+  static Future<Map<String, DateTime>> _mediaStoreYearFallback(
+    List<Map<String, dynamic>> platformSongs,
+    Map<String, String>? knownFingerprints,
+  ) async {
+    final paths = <String>[
+      for (final m in platformSongs)
+        if (m['year'] == null &&
+            _needsYearFallback(m['path'] as String) &&
+            !_isUnchanged(m, knownFingerprints))
+          m['path'] as String,
+    ];
+    if (paths.isEmpty) return const {};
+    return Isolate.run(() => _readReleaseDates(paths));
+  }
+
+  static bool _isUnchanged(
+    Map<String, dynamic> song,
+    Map<String, String>? knownFingerprints,
+  ) {
+    if (knownFingerprints == null) return false;
+    final mtimeMs = song['mtimeMs'] as int?;
+    final size = song['size'] as int?;
+    if (mtimeMs == null || size == null) return false;
+    return knownFingerprints[song['path'] as String] ==
+        fingerprint(mtimeMs, size);
+  }
+
   /// Formats MediaStore does not index a year for
-  static const _yearFallbackExtensions = {'.flac', '.ogg', '.oppus', '.ape'};
+  static const _yearFallbackExtensions = {'.flac', '.ogg', '.opus', '.ape'};
 
   static bool _needsYearFallback(String path) {
     final dot = path.lastIndexOf('.');
