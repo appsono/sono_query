@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.6
+
+### Fixed
+
+- Missing release year on Android for FLAC/OGG/Opus/APE. MediaStore's `YEAR`
+  column is never filled for Vorbis-comment formats, so those files now fall
+  back to a direct tag read in a background isolate
+
+### Added
+
+- `MetadataReader.readReleaseDateSync`
+
 ## 0.8.5
 
 ### Fixed

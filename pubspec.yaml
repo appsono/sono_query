@@ -1,7 +1,7 @@
 name: sono_query
 description: "Audio file discovery and metadata reading for Sono."
 
-version: 0.8.5
+version: 0.8.6
 homepage: https://github.com/appsono/sono_query
 
 environment:
